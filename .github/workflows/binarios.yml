@@ -47,6 +47,11 @@ jobs:
         shell: pwsh
         run: |
           cargo build -p puente-desktop --release
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $dumpbin = & $vswhere -latest -find 'VC\Tools\MSVC\**\bin\Hostx64\x64\dumpbin.exe' | Select-Object -First 1
+          $deps = & $dumpbin /dependents target/release/puente.exe
+          $deps
+          if ($deps -match 'vcruntime|msvcp|ucrtbase|api-ms-win-crt') { throw 'puente.exe depende del runtime de C' }
           $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
           $name = "puente-$version-windows-x86_64"
           New-Item -ItemType Directory $name | Out-Null

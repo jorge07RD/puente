@@ -1,0 +1,4 @@
+# Enlaza el runtime de C dentro del .exe: así Windows no pide VCRUNTIME140.dll
+# ni que se instale el Visual C++ Redistributable.
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]
