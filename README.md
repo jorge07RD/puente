@@ -57,7 +57,7 @@ En Linux, tener el móvil a mano suele exigir dos herramientas: **KDE Connect** 
 | **Pantalla** | Ver y controlar el móvil | Ratón, rueda y teclado; atrás, inicio y recientes; se adapta al girar el móvil |
 | **Sonido** | Oír el móvil en la PC | Con interruptor para desactivarlo |
 | **Avisos** | Notificaciones en el escritorio | Se pueden descartar y, si la app lo admite, responder desde la PC |
-| **Llamadas** | Ver quién llama | Contestar o rechazar desde la PC, también llamadas de otras apps |
+| **Llamadas** | Ver quién llama | Aviso en la PC, también para llamadas de otras apps. Contestar desde la PC todavía no funciona en WhatsApp |
 | **Archivos** | Enviar en los dos sentidos | Arrastrando a la ventana, con progreso y confirmación de que se guardaron |
 | **Portapapeles** | Copiar y pegar entre dispositivos | Automático de la PC al móvil |
 | **Música** | Controlar lo que suena | Reproducir, pausar, anterior y siguiente |
