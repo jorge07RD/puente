@@ -1,0 +1,17 @@
+[package]
+name = "puente-android"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[target.'cfg(target_os = "android")'.dependencies]
+puente-core.workspace = true
+puente-ui.workspace = true
+eframe = { workspace = true, features = ["android-native-activity"] }
+android-activity = { version = "0.6", features = ["native-activity"] }
+android_logger = "0.15"
+jni = "0.21"
+libc = "0.2"
+log = "0.4"

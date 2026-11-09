@@ -1,0 +1,315 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-09T17:38:39+00:00",
+  "title": "Design System: Puente",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Rojo Señal",
+        "canonical": "oklch(66.6% 0.223 34.0)",
+        "tonalRamp": [
+          "#1d0200",
+          "#490a00",
+          "#7a1801",
+          "#af2600",
+          "#e73703",
+          "#fe7657",
+          "#ffb4a2",
+          "#fee9e4"
+        ]
+      },
+      "ground": {
+        "role": "neutral",
+        "displayName": "Fondo de Banco",
+        "canonical": "oklch(14.5% 0.002 286.1)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#252526",
+          "#424243",
+          "#616162",
+          "#828283",
+          "#a5a5a6",
+          "#c9c9ca",
+          "#eeeef0"
+        ]
+      },
+      "card": {
+        "role": "neutral",
+        "displayName": "Placa",
+        "canonical": "oklch(19.2% 0.002 286.2)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#252526",
+          "#424243",
+          "#616162",
+          "#828283",
+          "#a5a5a6",
+          "#c9c9ca",
+          "#eeeef0"
+        ]
+      },
+      "raised": {
+        "role": "neutral",
+        "displayName": "Placa Alzada",
+        "canonical": "oklch(24.0% 0.004 286.1)",
+        "tonalRamp": [
+          "#0b0b0d",
+          "#252527",
+          "#424244",
+          "#616163",
+          "#828284",
+          "#a5a5a7",
+          "#c9c9cb",
+          "#eeeef1"
+        ]
+      },
+      "edge": {
+        "role": "neutral",
+        "displayName": "Filo",
+        "canonical": "oklch(27.8% 0.004 286.2)",
+        "tonalRamp": [
+          "#0b0b0d",
+          "#252527",
+          "#424244",
+          "#616163",
+          "#828284",
+          "#a5a5a7",
+          "#c9c9cb",
+          "#eeeef1"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Tinta",
+        "canonical": "oklch(96.0% 0.004 106.5)",
+        "tonalRamp": [
+          "#0b0b09",
+          "#252523",
+          "#424240",
+          "#61615f",
+          "#828280",
+          "#a5a5a2",
+          "#c9c9c6",
+          "#efefec"
+        ]
+      },
+      "ink-soft": {
+        "role": "neutral",
+        "displayName": "Tinta Suave",
+        "canonical": "oklch(72.4% 0.007 106.6)",
+        "tonalRamp": [
+          "#0b0b08",
+          "#252521",
+          "#42423e",
+          "#61615d",
+          "#83837e",
+          "#a5a5a0",
+          "#c9c9c4",
+          "#efefe9"
+        ]
+      },
+      "dot-off": {
+        "role": "neutral",
+        "displayName": "Punto Apagado",
+        "canonical": "oklch(41.0% 0.003 286.3)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#252527",
+          "#424244",
+          "#616163",
+          "#828284",
+          "#a5a5a7",
+          "#c9c9cb",
+          "#eeeef1"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "value": {
+        "displayName": "Value",
+        "purpose": "Medidas secundarias como fps y mbps."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Instrucciones, nombres y texto de avisos."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Cabeceras numeradas y estados de tarjeta, en mayúsculas."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Texto de píldoras e interruptores, en mayúsculas."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "bridge-close",
+        "value": "0.7s, 1 - (1 - t)^3, desde 30 % de tendido",
+        "purpose": "El puente se cierra una vez al conectar."
+      },
+      {
+        "name": "bridge-search",
+        "value": "5s, seno, entre 30 % y 85 % de tendido",
+        "purpose": "El puente se tiende y se recoge mientras busca."
+      },
+      {
+        "name": "bridge-packet",
+        "value": "0.45 vueltas/s, lineal",
+        "purpose": "Paquete rojo mientras llega vídeo."
+      },
+      {
+        "name": "battery-sweep",
+        "value": "0.6s",
+        "purpose": "El anillo de batería avanza hasta el nuevo valor."
+      },
+      {
+        "name": "radar-pulse",
+        "value": "0.9 ciclos/s, lineal",
+        "purpose": "Pulso del radar mientras el móvil suena."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "columns-min",
+        "value": "860px × 580px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Tarjeta",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Aproximación web de una pieza nativa de egui, solo para el panel. Placa plana con cabecera numerada y punto de vivo.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-head\"><span>01 Enlace</span><i class=\"ds-live\"></i></div>Sin audio</div>",
+      "css": ".ds-card{font-family:'Martian Mono',ui-monospace,monospace;width:248px;padding:16px;border-radius:14px;background:#141415;border:1px solid #28282a;color:#f2f2ef;font-size:13px}.ds-card-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;text-transform:uppercase;font-size:12px;font-weight:500;letter-spacing:.8px;color:#a6a6a1}.ds-live{width:7px;height:7px;border-radius:50%;background:#ff4a1f}"
+    },
+    {
+      "name": "Píldora",
+      "kind": "button",
+      "refersTo": "pill",
+      "description": "Aproximación web de una pieza nativa de egui, solo para el panel. Acción secundaria.",
+      "html": "<button class=\"ds-pill\">Cancelar</button>",
+      "css": ".ds-pill{font-family:'Martian Mono',ui-monospace,monospace;text-transform:uppercase;font-size:12px;font-weight:500;height:32px;padding:0 14px;border-radius:9999px;background:#141415;color:#f2f2ef;border:1px solid #28282a;cursor:pointer}.ds-pill:hover{background:#1f1f21;border-color:#a6a6a1}.ds-pill:active{background:#28282a;border-color:#f2f2ef}.ds-pill:focus-visible{outline:1.5px solid #f2f2ef;outline-offset:2px}"
+    },
+    {
+      "name": "Píldora primaria",
+      "kind": "button",
+      "refersTo": "pill-primary",
+      "description": "Aproximación web de una pieza nativa de egui, solo para el panel. Acción principal, delineada en el acento.",
+      "html": "<button class=\"ds-pill-primary\">Coinciden</button>",
+      "css": ".ds-pill-primary{font-family:'Martian Mono',ui-monospace,monospace;text-transform:uppercase;font-size:12px;font-weight:500;height:44px;padding:0 14px;border-radius:9999px;background:#141415;color:#ff4a1f;border:1px solid #ff4a1f;cursor:pointer}.ds-pill-primary:hover{background:#1f1f21}.ds-pill-primary:active{background:#28282a}.ds-pill-primary:focus-visible{outline:1.5px solid #f2f2ef;outline-offset:2px}"
+    },
+    {
+      "name": "Botón de icono",
+      "kind": "button",
+      "refersTo": "icon-button",
+      "description": "Aproximación web de una pieza nativa de egui, solo para el panel. Navegación y transporte secundario.",
+      "html": "<button class=\"ds-icon\" aria-label=\"Inicio\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 20 20\" aria-hidden=\"true\"><circle cx=\"10\" cy=\"10\" r=\"6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\"/></svg></button>",
+      "css": ".ds-icon{width:44px;height:44px;border-radius:50%;background:transparent;display:inline-grid;place-items:center;cursor:pointer;color:#f2f2ef;border:0}.ds-icon:hover{background:#1f1f21}.ds-icon:active{background:#28282a}.ds-icon:focus-visible{outline:1.5px solid #f2f2ef;outline-offset:2px}"
+    },
+    {
+      "name": "Botón de icono primario",
+      "kind": "button",
+      "refersTo": "icon-button-primary",
+      "description": "Aproximación web de una pieza nativa de egui, solo para el panel. Control principal de una tarjeta: reproducir, hacer sonar, compartir.",
+      "html": "<button class=\"ds-icon-primary\" aria-label=\"Reproducir\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7.7 4.8 19.2 12 7.7 19.2Z\" fill=\"currentColor\"/></svg></button>",
+      "css": ".ds-icon-primary{width:52px;height:52px;border-radius:50%;background:transparent;display:inline-grid;place-items:center;cursor:pointer;color:#ff4a1f;border:1.5px solid #ff4a1f}.ds-icon-primary:hover{background:#1f1f21}.ds-icon-primary:active{background:#28282a}.ds-icon-primary:focus-visible{outline:1.5px solid #f2f2ef;outline-offset:2px}"
+    },
+    {
+      "name": "Interruptor",
+      "kind": "custom",
+      "refersTo": "switch",
+      "description": "Aproximación web de una pieza nativa de egui, solo para el panel. Fila pulsable con pista delineada; la perilla encendida va en el acento.",
+      "html": "<button class=\"ds-switch\" role=\"switch\" aria-checked=\"true\">Animaciones<span class=\"ds-track\"><i class=\"ds-knob\"></i></span></button>",
+      "css": ".ds-switch{font-family:'Martian Mono',ui-monospace,monospace;text-transform:uppercase;font-size:12px;font-weight:500;display:flex;justify-content:space-between;align-items:center;width:216px;height:30px;background:none;border:0;color:#a6a6a1;cursor:pointer;padding:0}.ds-track{position:relative;width:34px;height:18px;box-sizing:border-box;border-radius:9999px;border:1px solid #28282a}.ds-switch:hover .ds-track{border-color:#a6a6a1}.ds-switch:focus-visible{outline:1.5px solid #f2f2ef;outline-offset:2px}.ds-knob{position:absolute;top:2.5px;right:2.5px;width:11px;height:11px;border-radius:50%;background:#ff4a1f}"
+    },
+    {
+      "name": "Puente",
+      "kind": "custom",
+      "refersTo": "bridge",
+      "description": "Aproximación web de una pieza nativa de egui, solo para el panel. El motivo propio, con paquete rojo mientras llega vídeo.",
+      "html": "<div class=\"ds-bridge-wrap\"><svg class=\"ds-bridge\" viewBox=\"-3 -3 246 70\" width=\"246\" height=\"70\" role=\"img\" aria-label=\"Puente de puntos\"><circle cx=\"0.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"0.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"6.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"6.0\" cy=\"53.5\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"12.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"12.0\" cy=\"49.3\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"18.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"18.0\" cy=\"45.2\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"24.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"24.0\" cy=\"41.4\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"24.0\" cy=\"52.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"24.0\" cy=\"46.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"30.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"30.0\" cy=\"37.9\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"36.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"36.0\" cy=\"34.5\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"42.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"42.0\" cy=\"31.4\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"48.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"48.0\" cy=\"28.6\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"48.0\" cy=\"52.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"48.0\" cy=\"46.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"48.0\" cy=\"40.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"48.0\" cy=\"34.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"54.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"54.0\" cy=\"25.9\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"60.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"60.0\" cy=\"23.5\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"66.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"66.0\" cy=\"21.3\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"72.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"72.0\" cy=\"19.4\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"72.0\" cy=\"52.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"72.0\" cy=\"46.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"72.0\" cy=\"40.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"72.0\" cy=\"34.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"72.0\" cy=\"28.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"78.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"78.0\" cy=\"17.6\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"84.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"84.0\" cy=\"16.1\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"90.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"90.0\" cy=\"14.9\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"96.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"96.0\" cy=\"13.8\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"96.0\" cy=\"52.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"96.0\" cy=\"46.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"96.0\" cy=\"40.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"96.0\" cy=\"34.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"96.0\" cy=\"28.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"96.0\" cy=\"22.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"102.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"102.0\" cy=\"13.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"108.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"108.0\" cy=\"12.5\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"114.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"114.0\" cy=\"12.1\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"120.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"120.0\" cy=\"12.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"120.0\" cy=\"52.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"120.0\" cy=\"46.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"120.0\" cy=\"40.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"120.0\" cy=\"34.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"120.0\" cy=\"28.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"120.0\" cy=\"22.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"120.0\" cy=\"16.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"126.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"126.0\" cy=\"12.1\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"132.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"132.0\" cy=\"12.5\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"138.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"138.0\" cy=\"13.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"144.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"144.0\" cy=\"13.8\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"144.0\" cy=\"52.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"144.0\" cy=\"46.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"144.0\" cy=\"40.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"144.0\" cy=\"34.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"144.0\" cy=\"28.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"144.0\" cy=\"22.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"150.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"150.0\" cy=\"14.9\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"156.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"156.0\" cy=\"16.1\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"162.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"162.0\" cy=\"17.6\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"168.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"168.0\" cy=\"19.4\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"168.0\" cy=\"52.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"168.0\" cy=\"46.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"168.0\" cy=\"40.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"168.0\" cy=\"34.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"168.0\" cy=\"28.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"174.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"174.0\" cy=\"21.3\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"180.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"180.0\" cy=\"23.5\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"186.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"186.0\" cy=\"25.9\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"192.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"192.0\" cy=\"28.6\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"192.0\" cy=\"52.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"192.0\" cy=\"46.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"192.0\" cy=\"40.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"192.0\" cy=\"34.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"198.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"198.0\" cy=\"31.4\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"204.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"204.0\" cy=\"34.5\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"210.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"210.0\" cy=\"37.9\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"216.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"216.0\" cy=\"41.4\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"216.0\" cy=\"52.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"216.0\" cy=\"46.0\" r=\"1.43\" fill=\"#f2f2ef\" fill-opacity=\"0.45\"/><circle cx=\"222.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"222.0\" cy=\"45.2\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"228.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"228.0\" cy=\"49.3\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"234.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"234.0\" cy=\"53.5\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"240.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"240.0\" cy=\"58.0\" r=\"2.04\" fill=\"#f2f2ef\"/><circle cx=\"148.8\" cy=\"58.0\" r=\"3.47\" fill=\"#ff4a1f\"/></svg></div>",
+      "css": ".ds-bridge-wrap{background:#141415;padding:16px;border-radius:14px;width:fit-content}"
+    }
+  ],
+  "narrative": {
+    "northStar": "El instrumento bajo observación",
+    "overview": "El móvil es lo observado y ocupa el centro. Alrededor, tarjetas pequeñas miden lo que le pasa: enlace, batería, audio, música, avisos, archivos. La ventana se lee como un banco de medida: fondo casi negro, tarjetas planas de filo fino, datos en puntos blancos y un único rojo anaranjado para lo que está activo, en vivo o pide atención.\n\nLa densidad es de instrumento y la tipografía es una sola familia monoespaciada. El mundo visual lo fijó la imagen de referencia del autor. El motivo propio es el puente de puntos entre la PC y el móvil, que se cierra al conectar y lleva un paquete rojo mientras llega vídeo.",
+    "keyCharacteristics": [
+      "Fondo casi negro con tarjetas planas y filo de 1 px.",
+      "Gráficos de datos en matriz de puntos, nunca en barras o trazos continuos.",
+      "Etiquetas numeradas, en mayúsculas y monoespaciadas.",
+      "Un solo color, con significado fijo.",
+      "Cada cifra sale de una medida real."
+    ],
+    "rules": [
+      {
+        "name": "La Regla del Único Color",
+        "body": "No hay segundo acento. El rojo significa activo, en vivo o atención; si un elemento no es ninguna de las tres cosas ni un control primario, no lo lleva.",
+        "section": "colors"
+      },
+      {
+        "name": "La Regla del Punto que Enciende",
+        "body": "Un gráfico de datos muestra su escala completa: puntos de Tinta encendidos, Punto Apagado para lo que falta y, en anillo y barra de avance, el último punto en Rojo Señal.",
+        "section": "colors"
+      },
+      {
+        "name": "La Regla de la Etiqueta Numerada",
+        "body": "Cada tarjeta se titula con índice de dos dígitos y nombre (`01 ENLACE`). Los índices son consecutivos dentro de la pantalla; si una tarjeta no aparece, la siguiente se renumera.",
+        "section": "typography"
+      },
+      {
+        "name": "La Regla de la Matriz Corta",
+        "body": "La matriz de puntos es para cifras y palabras cortas, nunca para texto corrido, y no baja de 5 de distancia entre puntos. Las cifras tienen todas el mismo ancho, para que no bailen al cambiar.",
+        "section": "typography"
+      },
+      {
+        "name": "La Regla de la Cifra Medida",
+        "body": "Toda cifra viene de la conexión o del móvil. Sin dato se muestra un guion, nunca un cero ni un valor de ejemplo.",
+        "section": "typography"
+      },
+      {
+        "name": "La Regla del Móvil al Centro",
+        "body": "La pantalla compartida conserva sus proporciones y ninguna tarjeta la invade. Las tarjetas ceden contenido antes que espacio al móvil.",
+        "section": "layout"
+      },
+      {
+        "name": "La Regla de la Placa Plana",
+        "body": "Sin sombras, resplandores ni rellenos en degradado. Los puntos sí pueden atenuarse por escalones, como los anillos del radar o los tirantes del puente; eso es dibujo en puntos, no degradado.",
+        "section": "elevation"
+      },
+      {
+        "name": "La Regla del Acento que Traza",
+        "body": "En un control, el rojo colorea borde, texto, glifo o perilla, nunca el fondo.",
+        "section": "components"
+      },
+      {
+        "name": "La Regla de la Quietud Disponible",
+        "body": "Todo el movimiento obedece al interruptor Animaciones. Sin él, el puente queda quieto (tendido al 60 % o completo) y la información sigue visible.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Do toma colores, medidas y tamaños de `theme.rs`, y dibuja las piezas con `parts.rs` y `dots.rs`.",
+      "Do numera cada tarjeta nueva con índice de dos dígitos, consecutivo en su pantalla.",
+      "Do representa los datos nuevos con puntos encendidos sobre puntos apagados.",
+      "Do reserva Rojo Señal para activo, en vivo, atención y controles primarios.",
+      "Do muestra un guion cuando falte una medida.",
+      "Do mantén 48 de objetivo táctil en el móvil.",
+      "Do haz que cada animación nueva respete el interruptor Animaciones."
+    ],
+    "donts": [
+      "Don't añadas un segundo color de acento.",
+      "Don't pongas Rojo Señal de fondo en tarjetas o controles; la marca de `branding/` es aparte y sí usa fondos rojos y claros.",
+      "Don't uses sombras, resplandores ni rellenos en degradado en tarjetas o controles.",
+      "Don't muestres cifras inventadas o decorativas fuera de la galería de desarrollo.",
+      "Don't escribas texto corrido en matriz de puntos ni bajes de 5 entre puntos.",
+      "Don't añadas una segunda familia tipográfica.",
+      "Don't dejes que las tarjetas tapen o deformen la pantalla del móvil."
+    ]
+  }
+}

@@ -1,0 +1,56 @@
+import java.util.Properties
+
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+// La clave vive fuera del proyecto: perderla obligaría a reinstalar la app.
+// Sin ella, el APK se firma con la clave de depuración de cada máquina.
+val signingDir = file(System.getProperty("user.home") + "/.local/share/puente/signing")
+val signingFile = signingDir.resolve("signing.properties")
+val signing = Properties().apply {
+    if (signingFile.exists()) signingFile.inputStream().use { load(it) }
+}
+
+android {
+    namespace = "dev.puente.app"
+    compileSdk = 35
+
+    defaultConfig {
+        applicationId = "dev.puente.app"
+        minSdk = 29
+        targetSdk = 35
+        versionCode = 1
+        versionName = "0.1.0"
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
+    }
+
+    if (signingFile.exists()) {
+        signingConfigs {
+            create("puente") {
+                storeFile = signingDir.resolve("puente.keystore")
+                storePassword = signing.getProperty("storePassword")
+                keyAlias = signing.getProperty("keyAlias")
+                keyPassword = signing.getProperty("keyPassword")
+            }
+        }
+
+        buildTypes {
+            getByName("debug") {
+                signingConfig = signingConfigs.getByName("puente")
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}

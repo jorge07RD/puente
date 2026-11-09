@@ -1,0 +1,9 @@
+[package]
+name = "puente-ui"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+puente-core.workspace = true
+eframe.workspace = true
+unicode-normalization = "0.1"
