@@ -15,6 +15,7 @@ import android.service.notification.StatusBarNotification
 /** Lee las notificaciones y controla la música del móvil. */
 class NotifService : NotificationListenerService() {
     private val handler = Handler(Looper.getMainLooper())
+    private var watched: List<MediaController> = emptyList()
     private var controller: MediaController? = null
 
     private val mediaCallback = object : MediaController.Callback() {
@@ -42,7 +43,8 @@ class NotifService : NotificationListenerService() {
         instance = null
         Native.onNotificationAccess(false)
         getSystemService(MediaSessionManager::class.java).removeOnActiveSessionsChangedListener(sessionsListener)
-        controller?.unregisterCallback(mediaCallback)
+        watched.forEach { it.unregisterCallback(mediaCallback) }
+        watched = emptyList()
         controller = null
         Native.onMedia(null, null, false)
     }
@@ -77,37 +79,57 @@ class NotifService : NotificationListenerService() {
 
     private fun component() = ComponentName(this, NotifService::class.java)
 
+    /** Se vigilan todas las sesiones: cualquiera puede empezar a sonar en cualquier momento. */
     private fun refreshSessions() {
         val sessions = getSystemService(MediaSessionManager::class.java).getActiveSessions(component())
-        val chosen = sessions.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
-            ?: sessions.firstOrNull()
-
-        if (chosen?.sessionToken != controller?.sessionToken) {
-            controller?.unregisterCallback(mediaCallback)
-            chosen?.registerCallback(mediaCallback, handler)
-            controller = chosen
+        if (sessions.map { it.sessionToken } != watched.map { it.sessionToken }) {
+            watched.forEach { it.unregisterCallback(mediaCallback) }
+            sessions.forEach { it.registerCallback(mediaCallback, handler) }
+            watched = sessions
+            Native.log("música: " + sessions.joinToString { "${it.packageName} ${it.playbackState?.state} ${titleOf(it) != null}" })
         }
         publishMedia()
     }
 
+    private fun isPlaying(session: MediaController): Boolean =
+        session.playbackState?.state == PlaybackState.STATE_PLAYING ||
+            session.playbackState?.state == PlaybackState.STATE_BUFFERING
+
+    private fun titleOf(session: MediaController): String? {
+        val metadata = session.metadata ?: return null
+        return (metadata.getString(MediaMetadata.METADATA_KEY_TITLE)
+            ?: metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE))
+            ?.takeIf { it.isNotBlank() }
+    }
+
+    private fun artistOf(session: MediaController): String {
+        val metadata = session.metadata ?: return ""
+        return metadata.getString(MediaMetadata.METADATA_KEY_ARTIST)
+            ?: metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE)
+            ?: ""
+    }
+
+    /** Lo que suena gana a lo pausado; una sesión sin título no sirve de nada en la PC. */
+    private fun bestSession(): MediaController? =
+        watched
+            .filter { titleOf(it) != null }
+            .maxByOrNull { if (isPlaying(it)) 1 else 0 }
+
     private fun publishMedia() {
-        val current = controller
-        val metadata = current?.metadata
-        val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
-        if (current == null || title == null) {
+        val current = bestSession()
+        controller = current
+        if (current == null) {
             Native.onMedia(null, null, false)
             return
         }
-        val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
-        Native.onMedia(title, artist, current.playbackState?.state == PlaybackState.STATE_PLAYING)
+        Native.onMedia(titleOf(current), artistOf(current), isPlaying(current))
     }
 
     fun controlMedia(action: String) {
         val current = controller ?: return
         val controls = current.transportControls
         when (action) {
-            "play_pause" ->
-                if (current.playbackState?.state == PlaybackState.STATE_PLAYING) controls.pause() else controls.play()
+            "play_pause" -> if (isPlaying(current)) controls.pause() else controls.play()
             "next" -> controls.skipToNext()
             "previous" -> controls.skipToPrevious()
         }

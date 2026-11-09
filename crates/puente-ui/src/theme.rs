@@ -16,6 +16,9 @@ pub const DOT_OFF: Color32 = Color32::from_rgb(0x4a, 0x4a, 0x4c);
 /// El único color: lo activo, lo que está en vivo y lo que pide atención.
 pub const ACCENT: Color32 = Color32::from_rgb(0xff, 0x4a, 0x1f);
 
+/// Solo en la animación de carga.
+pub const LOADING: Color32 = Color32::from_rgb(0x4a, 0xde, 0x80);
+
 pub const GAP: f32 = 10.0;
 pub const PADDING: f32 = 16.0;
 pub const CARD_RADIUS: u8 = 14;

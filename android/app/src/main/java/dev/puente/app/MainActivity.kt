@@ -49,6 +49,7 @@ class MainActivity : NativeActivity() {
 
     override fun onResume() {
         super.onResume()
+        Native.log("MainActivity.onResume")
         val power = getSystemService(PowerManager::class.java)
         Native.onBatteryUnrestricted(power.isIgnoringBatteryOptimizations(packageName))
     }

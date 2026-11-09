@@ -121,6 +121,17 @@ fn video_starts_at_a_keyframe_and_reaches_the_desktop() {
 
     phone.set_mirroring(false);
     wait_for(&desktop, "fin del vídeo", |v| !v.mirroring);
+
+    // Los últimos fotogramas en cola llegan después del aviso de fin.
+    assert!(!phone.send_video(packet(VideoPacket::KEY, 5)));
+    assert!(!phone.send_video(packet(0, 6)));
+    sleep(Duration::from_millis(300));
+    assert!(!desktop.view().mirroring, "un fotograma rezagado no reabre la transmisión");
+
+    // Una transmisión nueva siempre empieza por los parámetros del codificador.
+    assert!(!phone.send_video(packet(VideoPacket::CONFIG, 7)));
+    assert!(!phone.send_video(packet(VideoPacket::KEY, 8)));
+    wait_for(&desktop, "transmisión nueva", |v| v.mirroring);
 }
 
 #[test]
@@ -291,6 +302,63 @@ fn the_phone_log_reaches_the_desktop_even_if_written_before_connecting() {
         assert!(start.elapsed() < Duration::from_secs(10), "registro incompleto: {text}");
         sleep(Duration::from_millis(20));
     }
+}
+
+#[test]
+fn the_sender_learns_when_a_file_was_really_saved() {
+    let desktop_dir = tempfile::tempdir().unwrap();
+    let phone_dir = tempfile::tempdir().unwrap();
+    let port = free_port();
+    let desktop = engine(Role::Desktop, desktop_dir.path(), port);
+    let phone = engine(Role::Phone, phone_dir.path(), port);
+    let events = desktop.take_desktop_events().unwrap();
+    pair(&desktop, &phone);
+    let wait = Duration::from_secs(5);
+
+    let saved = desktop.begin_file("foto.jpg", 4).unwrap();
+    assert!(desktop.send_file_chunk(saved, vec![1, 2, 3, 4]));
+    desktop.end_file(saved, true);
+    assert_eq!(events.recv_timeout(wait).unwrap(), DesktopEvent::FileDelivered(saved));
+
+    // Un archivo que dice medir más de lo enviado llega incompleto.
+    let short = desktop.begin_file("corta.jpg", 100).unwrap();
+    assert!(desktop.send_file_chunk(short, vec![1]));
+    desktop.end_file(short, true);
+    assert_eq!(events.recv_timeout(wait).unwrap(), DesktopEvent::FileFailed(short));
+}
+
+#[test]
+fn unpairing_forgets_on_both_sides_and_asks_for_a_code_again() {
+    let desktop_dir = tempfile::tempdir().unwrap();
+    let phone_dir = tempfile::tempdir().unwrap();
+    let port = free_port();
+    let desktop = engine(Role::Desktop, desktop_dir.path(), port);
+    let phone = engine(Role::Phone, phone_dir.path(), port);
+    pair(&desktop, &phone);
+
+    desktop.unpair().unwrap();
+
+    let desktop_view = wait_for(&desktop, "fin en la PC", |v| v.status == Status::Searching);
+    let phone_view = wait_for(&phone, "fin en el móvil", |v| v.status == Status::Searching && v.paired.is_empty());
+    assert!(desktop_view.paired.is_empty());
+    assert!(phone_view.paired.is_empty());
+
+    // No se reconecta solo: hace falta emparejar de nuevo.
+    sleep(Duration::from_secs(4));
+    assert_eq!(phone.view().status, Status::Searching);
+    pair(&desktop, &phone);
+}
+
+#[test]
+fn the_audio_choice_survives_a_restart() {
+    let dir = tempfile::tempdir().unwrap();
+    let port = free_port();
+    let first = engine(Role::Desktop, dir.path(), port);
+    assert!(first.audio_enabled());
+    first.set_audio_enabled(false);
+    drop(first);
+    let second = engine(Role::Desktop, dir.path(), free_port());
+    assert!(!second.audio_enabled());
 }
 
 #[test]

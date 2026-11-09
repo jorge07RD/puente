@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use tokio::io::{AsyncRead, AsyncWrite, split};
-use tokio::sync::mpsc;
+use tokio::sync::{Notify, mpsc};
 use tokio::time::{MissedTickBehavior, interval, timeout};
 
 use crate::wire::{Frame, Message, VideoPacket, read_frame, write_frame};
@@ -42,6 +42,8 @@ where
         mut files,
     } = outgoing;
 
+    let closing = Arc::new(Notify::new());
+    let close_after_write = closing.clone();
     let ping_sent = Arc::new(Mutex::new(None::<Instant>));
     let ping_clock = ping_sent.clone();
 
@@ -63,14 +65,20 @@ where
             if frame == Frame::Control(Message::Ping) {
                 *ping_clock.lock().expect("reloj disponible") = Some(Instant::now());
             }
-            if write_frame(&mut writer, &frame).await.is_err() {
+            let is_last = frame == Frame::Control(Message::Unpair);
+            if write_frame(&mut writer, &frame).await.is_err() || is_last {
+                close_after_write.notify_one();
                 return;
             }
         }
     });
 
     let result = loop {
-        let frame = match timeout(DEAD_AFTER, read_frame(&mut reader)).await {
+        let received = tokio::select! {
+            _ = closing.notified() => break Ok(()),
+            received = timeout(DEAD_AFTER, read_frame(&mut reader)) => received,
+        };
+        let frame = match received {
             Ok(Ok(frame)) => frame,
             Ok(Err(error)) => break Err(error),
             Err(_) => break Err(Error::Timeout),
@@ -85,6 +93,10 @@ where
                 if let Some(sent) = ping_sent.lock().expect("reloj disponible").take() {
                     on_round_trip(sent.elapsed());
                 }
+            }
+            Frame::Control(Message::Unpair) => {
+                on_frame(Frame::Control(Message::Unpair));
+                break Ok(());
             }
             other => on_frame(other),
         }

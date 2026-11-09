@@ -119,7 +119,7 @@ Neutros casi sin tinte y un único acento saturado que aparece en pequeñas dosi
 - **Punto Apagado** (dot-off): puntos sin encender en anillos, puente, barra y zona de archivos.
 
 ### Named Rules
-**La Regla del Único Color.** No hay segundo acento. El rojo significa activo, en vivo o atención; si un elemento no es ninguna de las tres cosas ni un control primario, no lo lleva.
+**La Regla del Único Color.** No hay segundo acento. El rojo significa activo, en vivo o atención; si un elemento no es ninguna de las tres cosas ni un control primario, no lo lleva. Única excepción, pedida por el autor: el verde `#4ade80` de las animaciones de carga (el puente mientras busca y la batería mientras se carga), que no aparece en ningún otro sitio.
 
 **La Regla del Punto que Enciende.** Un gráfico de datos muestra su escala completa: puntos de Tinta encendidos, Punto Apagado para lo que falta y, en anillo y barra de avance, el último punto en Rojo Señal.
 

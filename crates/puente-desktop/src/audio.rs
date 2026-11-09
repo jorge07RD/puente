@@ -59,12 +59,13 @@ fn level_of(packet: &[u8]) -> f32 {
     (peak as f32 / f32::from(i16::MAX)).min(1.0).sqrt()
 }
 
-pub fn start(engine: &Engine) -> AudioMeter {
+pub fn start(engine: &Arc<Engine>) -> AudioMeter {
     let meter = AudioMeter::default();
     if let Some(packets) = engine.take_audio_receiver() {
         let levels = meter.clone();
+        let engine = engine.clone();
         std::thread::spawn(move || {
-            if let Err(error) = play(packets, levels) {
+            if let Err(error) = play(packets, levels, &engine) {
                 eprintln!("no se pudo reproducir el audio: {error}");
             }
         });
@@ -72,7 +73,7 @@ pub fn start(engine: &Engine) -> AudioMeter {
     meter
 }
 
-fn play(packets: Receiver<Vec<u8>>, meter: AudioMeter) -> Result<(), Box<dyn std::error::Error>> {
+fn play(packets: Receiver<Vec<u8>>, meter: AudioMeter, engine: &Engine) -> Result<(), Box<dyn std::error::Error>> {
     let device = cpal::default_host()
         .default_output_device()
         .ok_or("no hay dispositivo de salida")?;
@@ -98,8 +99,12 @@ fn play(packets: Receiver<Vec<u8>>, meter: AudioMeter) -> Result<(), Box<dyn std
     stream.play()?;
 
     for packet in packets {
-        meter.record(level_of(&packet));
         let mut queue = queue.lock().expect("cola disponible");
+        if !engine.audio_enabled() {
+            queue.clear();
+            continue;
+        }
+        meter.record(level_of(&packet));
         queue.extend(
             packet
                 .as_chunks::<2>()

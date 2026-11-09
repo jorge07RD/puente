@@ -11,11 +11,16 @@ use crate::Result;
 #[serde(default)]
 pub struct Settings {
     pub animations: bool,
+    /// Reproducir en la PC el audio del móvil.
+    pub audio: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { animations: true }
+        Self {
+            animations: true,
+            audio: true,
+        }
     }
 }
 

@@ -1,13 +1,15 @@
 //! Muestra todas las piezas con datos de ejemplo, para revisarlas sin un móvil.
 //! Se abre con `puente --gallery`; ningún dato de aquí llega a la app real.
 
-use std::f32::consts::TAU;
 use std::time::Duration;
 
 use eframe::egui::{self, Rect, vec2};
 
+use crate::RecentFile;
+use crate::desktop::draw_recent_files;
 use crate::dots::{self, BridgeState};
 use crate::icons::Icon;
+use crate::motion;
 use crate::parts::{card_at, dot_figure, icon_button, label, pill_button, stat};
 use crate::theme::{self, ACCENT, GAP, GROUND, INK};
 
@@ -68,7 +70,8 @@ impl eframe::App for Gallery {
                 card_at(ui, cell(1, 0), "02", "Batería", false, |ui| {
                     let (rect, _) = ui.allocate_exact_size(ui.available_size(), egui::Sense::hover());
                     let radius = (rect.height().min(rect.width()) / 2.0 - 6.0).max(10.0);
-                    dots::paint_ring(ui.painter(), rect.center(), radius, 54, 0.78, true);
+                    let phase = (time / 2.4).fract();
+                    dots::paint_charging_ring(ui.painter(), rect.center(), radius, 54, 0.78, Some(phase));
                     let size = dots::text_size("78", 6.0);
                     dots::paint_text(ui.painter(), rect.center() - size / 2.0, "78", 6.0, INK);
                 });
@@ -82,8 +85,7 @@ impl eframe::App for Gallery {
 
                 card_at(ui, cell(0, 1), "04", "Esperando", true, |ui| {
                     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 74.0), egui::Sense::hover());
-                    let reach = 0.25 + 0.5 * (0.5 + 0.5 * (time * TAU / 4.0).sin());
-                    dots::paint_bridge(ui.painter(), rect, BridgeState::Reaching { reach });
+                    dots::paint_bridge(ui.painter(), rect, motion::searching(time, true));
                     ui.add_space(14.0);
                     label(ui, "Buscando tu móvil");
                 });
@@ -109,10 +111,24 @@ impl eframe::App for Gallery {
                     });
                 });
 
-                card_at(ui, cell(0, 2), "07", "Móvil", false, |ui| {
+                card_at(ui, cell(0, 2), "07", "Archivos enviados", true, |ui| {
                     let (rect, _) = ui.allocate_exact_size(ui.available_size(), egui::Sense::hover());
-                    let phone = Rect::from_center_size(rect.center(), vec2(rect.height() * 0.5, rect.height()));
-                    dots::paint_phone(ui.painter(), phone, 6.0);
+                    let sample = |name: &str, delivered, opacity| RecentFile {
+                        name: name.to_string(),
+                        delivered,
+                        opacity,
+                    };
+                    let files = [
+                        sample("foto-de-ejemplo.jpg", true, 1.0),
+                        sample("nombre-de-archivo-muy-largo-para-ver-como-se-recorta.pdf", true, 1.0),
+                        sample("documento.zip", false, 1.0),
+                        sample("desvaneciendo.png", true, 0.4),
+                        sample("otro-1.png", true, 1.0),
+                        sample("otro-2.png", true, 1.0),
+                        sample("otro-3.png", true, 1.0),
+                        sample("otro-4.png", true, 1.0),
+                    ];
+                    draw_recent_files(ui, rect, &files);
                 });
 
                 card_at(ui, cell(1, 2), "08", "Navegación", false, |ui| {

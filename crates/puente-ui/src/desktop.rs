@@ -9,14 +9,14 @@ use eframe::egui::{
 use puente_core::wire::{Input, KeyPress, MediaAction, NavAction, NotificationInfo, PhoneCommand, TouchPhase};
 use puente_core::{Engine, Status, View};
 
-use crate::DesktopActions;
+use crate::{DesktopActions, RecentFile};
 use crate::dots::{self, BridgeState};
 use crate::motion::{self, LinkMotion};
-use crate::icons::Icon;
+use crate::icons::{self, Icon};
 use crate::parts::{
     self, card_full, displayable, dot_figure, icon_button, icon_button_at, label, pill, pill_button, stat, switch_row,
 };
-use crate::theme::{ACCENT, EDGE, GAP, INK, INK_SOFT, TEXT_LABEL};
+use crate::theme::{ACCENT, EDGE, GAP, INK, INK_SOFT, LOADING, PADDING, TEXT_LABEL};
 
 const OUTER: f32 = 10.0;
 const SIDE_WIDTH: f32 = 248.0;
@@ -28,17 +28,18 @@ const CARD_COUNT: usize = 8;
 const WIDE_RATIO: f32 = 1.1;
 const GRID_MIN_CARD_HEIGHT: f32 = 150.0;
 const CARD_MOVE_SECONDS: f32 = 0.35;
+const RECENT_ROW_HEIGHT: f32 = 18.0;
 const TOOLBAR_HEIGHT: f32 = 56.0;
 const LANDSCAPE_ROW_HEIGHT: f32 = 168.0;
 const MUSIC_HEIGHT: f32 = 156.0;
-const FILES_HEIGHT: f32 = 176.0;
+const FILES_HEIGHT: f32 = 204.0;
 const SETTINGS_HEIGHT: f32 = 128.0;
 /// Lo mismo que tarda el móvil en callarse solo.
 const RING_SECONDS: f32 = 30.0;
 const STACKED_CARD_HEIGHT: f32 = 196.0;
 /// Por debajo de este ancho no caben las columnas junto al móvil.
 const COLUMNS_MIN_WIDTH: f32 = 860.0;
-const COLUMNS_MIN_HEIGHT: f32 = 580.0;
+const COLUMNS_MIN_HEIGHT: f32 = 600.0;
 const WAVE_COLUMNS: usize = 34;
 const SCREEN_RADIUS: u8 = 16;
 /// Por debajo de este nivel se considera silencio.
@@ -55,6 +56,8 @@ pub struct DesktopState {
     show_cards: bool,
     /// Solo la transmisión, sin tarjetas.
     focus: bool,
+    /// Hasta cuándo vale el segundo toque para desvincular.
+    unpair_until: Option<f32>,
     link: LinkMotion,
     cards: CardMotion,
 }
@@ -228,6 +231,7 @@ struct Frame<'a> {
     time: f32,
     bridge: BridgeState,
     hovering_files: bool,
+    recent_files: Vec<RecentFile>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -245,10 +249,15 @@ pub fn draw(
     } else {
         state.link.disconnected();
         state.ring_ends = None;
+        state.unpair_until = None;
         motion::searching(time, view.animations)
     };
     let hovering_files = ui.input(|input| !input.raw.hovered_files.is_empty());
-    if hovering_files || actions.is_some_and(|actions| actions.transfer().is_some()) {
+    let recent_files = actions.map(DesktopActions::recent_files).unwrap_or_default();
+    if hovering_files
+        || !recent_files.is_empty()
+        || actions.is_some_and(|actions| actions.transfer().is_some())
+    {
         ui.ctx().request_repaint_after(TRANSFER_REFRESH);
     }
     let frame = Frame {
@@ -258,6 +267,7 @@ pub fn draw(
         time,
         bridge,
         hovering_files,
+        recent_files,
     };
     let area = ui.max_rect().shrink(OUTER);
     match &view.status {
@@ -447,7 +457,10 @@ fn draw_connected(
 
 fn draw_card(ui: &mut egui::Ui, index: usize, rect: Rect, frame: &Frame, state: &mut DesktopState, name: &str) {
     match index {
-        0 => link_card(ui, rect, frame, name),
+        0 => {
+            link_card(ui, rect, frame, name);
+            unpair_control(ui, rect, frame, state);
+        }
         1 => battery_card(ui, rect, frame),
         2 => audio_card(ui, rect, frame),
         3 => ring_card(ui, rect, frame, state),
@@ -637,11 +650,49 @@ fn link_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame, name: &str) {
     });
 }
 
+/// Desvincular pide un segundo toque: deshacerlo obliga a emparejar otra vez.
+fn unpair_control(ui: &mut egui::Ui, card: Rect, frame: &Frame, state: &mut DesktopState) {
+    const CONFIRM_SECONDS: f32 = 4.0;
+    const HEADER_HEIGHT: f32 = 28.0;
+    /// Por debajo de este ancho, el texto chocaría con el título de la tarjeta.
+    const TEXT_MIN_WIDTH: f32 = 300.0;
+
+    let confirming = state.unpair_until.is_some_and(|until| frame.time < until);
+    let header = Rect::from_min_size(
+        card.min + vec2(PADDING, PADDING - 8.0),
+        vec2(card.width() - PADDING * 2.0, HEADER_HEIGHT),
+    );
+    let builder = UiBuilder::new()
+        .max_rect(header)
+        .layout(Layout::right_to_left(Align::Center));
+    ui.scope_builder(builder, |ui| {
+        if confirming {
+            ui.ctx().request_repaint_after(TRANSFER_REFRESH);
+            if pill(ui, "¿Seguro?", HEADER_HEIGHT, true).clicked() {
+                state.unpair_until = None;
+                let _ = frame.engine.unpair();
+            }
+        } else {
+            let pressed = if card.width() >= TEXT_MIN_WIDTH {
+                pill(ui, "Desvincular", HEADER_HEIGHT, false).clicked()
+            } else {
+                icon_button(ui, Icon::Unlink, HEADER_HEIGHT, false)
+                    .on_hover_text("Desvincular este móvil")
+                    .clicked()
+            };
+            if pressed {
+                state.unpair_until = Some(frame.time + CONFIRM_SECONDS);
+            }
+        }
+    });
+}
+
 fn battery_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
     const RING_DOTS: usize = 54;
     const LOW_PERCENT: u8 = 15;
     const CAPTION_HEIGHT: f32 = 20.0;
     const RING_SWEEP_SECONDS: f32 = 0.6;
+    const CHARGE_CYCLE_SECONDS: f32 = 2.4;
     const PITCH_PER_RADIUS: f32 = 0.072;
     const MAX_FIGURE_PITCH: f32 = 12.0;
 
@@ -665,7 +716,12 @@ fn battery_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
         } else {
             target
         };
-        dots::paint_ring(ui.painter(), center, radius, RING_DOTS, shown, known);
+        if charging {
+            let phase = frame.view.animations.then(|| (frame.time / CHARGE_CYCLE_SECONDS).fract());
+            dots::paint_charging_ring(ui.painter(), center, radius, RING_DOTS, shown, phase);
+        } else {
+            dots::paint_ring(ui.painter(), center, radius, RING_DOTS, shown, known);
+        }
 
         let text = if known { percent.to_string() } else { "-".to_string() };
         let pitch = (radius * PITCH_PER_RADIUS).clamp(dots::MIN_TEXT_PITCH, MAX_FIGURE_PITCH);
@@ -679,7 +735,13 @@ fn battery_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
         dots::paint_text(ui.painter(), origin, &text, pitch, color);
 
         if charging {
-            caption(ui, pos2(space.center().x, space.bottom() - CAPTION_HEIGHT / 2.0), "Cargando");
+            ui.painter().text(
+                pos2(space.center().x, space.bottom() - CAPTION_HEIGHT / 2.0),
+                egui::Align2::CENTER_CENTER,
+                "CARGANDO",
+                egui::FontId::new(TEXT_LABEL, crate::theme::medium()),
+                LOADING,
+            );
         }
     });
 }
@@ -699,16 +761,30 @@ fn audio_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
         .actions
         .map(DesktopActions::audio_levels)
         .unwrap_or_default();
-    let sounding = levels.iter().any(|level| *level > SILENCE_LEVEL);
+    let enabled = frame.view.audio_enabled;
+    let sounding = enabled && levels.iter().any(|level| *level > SILENCE_LEVEL);
+    const SWITCH_HEIGHT: f32 = 28.0;
 
     card_full(ui, rect, "03", "Audio", sounding, "", |ui| {
-        let height = (ui.available_height() - 28.0).max(24.0);
+        let height = (ui.available_height() - SWITCH_HEIGHT - 6.0).max(24.0);
         let (wave, _) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::hover());
         let mut columns = vec![0.0; WAVE_COLUMNS.saturating_sub(levels.len())];
-        columns.extend(&levels);
+        if enabled {
+            columns.extend(&levels);
+        } else {
+            columns.resize(WAVE_COLUMNS, 0.0);
+        }
         dots::paint_wave(ui.painter(), wave, &columns, 6.0);
         ui.add_space(6.0);
-        label(ui, if sounding { "Sonando en la PC" } else { "Sin audio" });
+
+        let status = match (enabled, sounding) {
+            (false, _) => "Desactivado",
+            (true, true) => "Sonando en la PC",
+            (true, false) => "Sin audio",
+        };
+        if switch_row(ui, status, enabled, SWITCH_HEIGHT).clicked() {
+            frame.engine.set_audio_enabled(!enabled);
+        }
     });
 }
 
@@ -830,6 +906,8 @@ fn ring_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame, state: &mut DesktopSt
 
 fn files_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
     const STATUS_HEIGHT: f32 = 20.0;
+    const ZONE_INSET: f32 = 12.0;
+    const BUTTON_HEIGHT: f32 = 32.0;
 
     let transfer = frame.actions.and_then(DesktopActions::transfer);
 
@@ -841,11 +919,26 @@ fn files_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
         let color = if frame.hovering_files { ACCENT } else { crate::theme::DOT_OFF };
         dots::paint_outline(ui.painter(), zone, 6.0, 2, color);
 
-        let button_rect = Rect::from_center_size(zone.center() + vec2(0.0, 12.0), vec2(zone.width(), 32.0));
+        let has_list = !frame.recent_files.is_empty() && !frame.hovering_files;
+        let button_center = if has_list {
+            pos2(zone.center().x, zone.bottom() - ZONE_INSET - BUTTON_HEIGHT / 2.0)
+        } else {
+            zone.center() + vec2(0.0, 12.0)
+        };
+        let button_rect = Rect::from_center_size(button_center, vec2(zone.width(), BUTTON_HEIGHT));
+
         if frame.hovering_files {
             caption(ui, zone.center(), "Suelta para enviar");
         } else {
-            caption(ui, zone.center() - vec2(0.0, 16.0), "Arrastra archivos aquí");
+            if has_list {
+                let list = Rect::from_min_max(
+                    zone.min + Vec2::splat(ZONE_INSET),
+                    pos2(zone.right() - ZONE_INSET, button_rect.top() - 4.0),
+                );
+                draw_recent_files(ui, list, &frame.recent_files);
+            } else {
+                caption(ui, zone.center() - vec2(0.0, 16.0), "Arrastra archivos aquí");
+            }
             let builder = UiBuilder::new()
                 .max_rect(button_rect)
                 .layout(Layout::top_down(Align::Center));
@@ -873,6 +966,54 @@ fn files_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
             }
         }
     });
+}
+
+/// Filas que caben, reservando una para avisar de las que no se ven.
+fn visible_rows(room: f32, total: usize) -> (usize, usize) {
+    let fit = ((room / RECENT_ROW_HEIGHT).floor() as usize).max(1);
+    if total <= fit {
+        (total, 0)
+    } else {
+        let shown = fit - 1;
+        (shown, total - shown)
+    }
+}
+
+pub(crate) fn draw_recent_files(ui: &mut egui::Ui, area: Rect, files: &[RecentFile]) {
+    const ICON: f32 = 14.0;
+
+    let (shown, hidden) = visible_rows(area.height(), files.len());
+    let painter = ui.painter().with_clip_rect(area);
+    let font = egui::FontId::new(TEXT_LABEL, crate::theme::medium());
+
+    for (row, file) in files.iter().take(shown).enumerate() {
+        let center_y = area.top() + (row as f32 + 0.5) * RECENT_ROW_HEIGHT;
+        let icon_rect = Rect::from_center_size(pos2(area.left() + ICON / 2.0, center_y), Vec2::splat(ICON));
+        let (icon, color) = if file.delivered { (Icon::Check, INK) } else { (Icon::Close, ACCENT) };
+        icons::paint(&painter, icon_rect, icon, color.gamma_multiply(file.opacity));
+
+        let room = area.width() - ICON - 8.0;
+        let text = if file.delivered { file.name.clone() } else { format!("No se pudo: {}", file.name) };
+        let mut job = egui::text::LayoutJob::simple_singleline(text, font.clone(), INK.gamma_multiply(file.opacity));
+        job.wrap = egui::text::TextWrapping::truncate_at_width(room);
+        let galley = painter.layout_job(job);
+        painter.galley(
+            pos2(icon_rect.right() + 8.0, center_y - galley.size().y / 2.0),
+            galley,
+            INK,
+        );
+    }
+
+    if hidden > 0 {
+        let center_y = area.top() + (shown as f32 + 0.5) * RECENT_ROW_HEIGHT;
+        painter.text(
+            pos2(area.left() + ICON + 8.0, center_y),
+            egui::Align2::LEFT_CENTER,
+            if shown == 0 { format!("{hidden} archivos") } else { format!("Y {hidden} más") },
+            font,
+            INK_SOFT,
+        );
+    }
 }
 
 fn settings_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
@@ -977,7 +1118,7 @@ mod tests {
 
     #[test]
     fn portrait_columns_fit_without_overlapping() {
-        for (width, height) in [(1100.0, 860.0), (1920.0, 1080.0), (1165.0, 615.0), (860.0, 700.0), (2560.0, 1400.0)] {
+        for (width, height) in [(1100.0, 860.0), (1920.0, 1080.0), (1165.0, 625.0), (860.0, 700.0), (2560.0, 1400.0)] {
             let area = window(width, height);
             let Arrangement::Columns { screen, left, right } = arrange(area, PORTRAIT) else {
                 panic!("se esperaban columnas en {width}x{height}");
@@ -1068,6 +1209,14 @@ mod tests {
         let mut motion = CardMotion::default();
         motion.place(first, false, 1.0, false);
         assert_eq!(motion.place(second, true, 2.0, false), second);
+    }
+
+    #[test]
+    fn the_list_says_how_many_rows_do_not_fit() {
+        assert_eq!(visible_rows(RECENT_ROW_HEIGHT * 3.0, 2), (2, 0));
+        assert_eq!(visible_rows(RECENT_ROW_HEIGHT * 3.0, 3), (3, 0));
+        assert_eq!(visible_rows(RECENT_ROW_HEIGHT * 3.0, 7), (2, 5));
+        assert_eq!(visible_rows(5.0, 4), (0, 4));
     }
 
     #[test]

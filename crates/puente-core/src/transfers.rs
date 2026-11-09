@@ -124,9 +124,14 @@ impl Incoming {
         })
     }
 
-    pub fn fail(&mut self, id: u32) {
-        if let Some(partial) = self.partial.remove(&id) {
-            let _ = fs::remove_file(partial.temporary);
+    /// Descarta un archivo a medias. Devuelve verdadero si se estaba recibiendo.
+    pub fn fail(&mut self, id: u32) -> bool {
+        match self.partial.remove(&id) {
+            Some(partial) => {
+                let _ = fs::remove_file(partial.temporary);
+                true
+            }
+            None => false,
         }
     }
 

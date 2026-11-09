@@ -20,6 +20,10 @@ const MAX_CODE_PITCH: f32 = 9.0;
 #[derive(Default)]
 pub struct PhoneState {
     link: LinkMotion,
+    first_frame_reported: bool,
+    now: f32,
+    /// Hasta cuándo vale el segundo toque para desvincular.
+    unpair_until: Option<f32>,
 }
 
 impl PhoneState {
@@ -48,6 +52,11 @@ pub fn draw(
     state: &mut PhoneState,
     time: f32,
 ) {
+    state.now = time;
+    if !state.first_frame_reported {
+        state.first_frame_reported = true;
+        engine.log(format!("primer cuadro dibujado, estado: {:?}", view.status));
+    }
     let bridge = if matches!(view.status, Status::Connected { .. }) {
         state.link.bridge(view.mirroring, time, view.animations)
     } else {
@@ -93,7 +102,7 @@ pub fn draw(
                     code,
                     answered,
                 } => draw_pairing(ui, engine, name, code, *answered, bridge),
-                Status::Connected { name } => draw_connected(ui, engine, view, phone, name, bridge),
+                Status::Connected { name } => draw_connected(ui, engine, view, phone, state, name, bridge),
             }
         });
     });
@@ -178,6 +187,7 @@ fn draw_connected(
     engine: &Engine,
     view: &View,
     phone: Option<&dyn PhoneActions>,
+    state: &mut PhoneState,
     name: &str,
     bridge: BridgeState,
 ) {
@@ -187,7 +197,12 @@ fn draw_connected(
         let round_trip = view
             .round_trip_ms
             .map_or_else(|| "—".to_string(), |value| value.to_string());
-        stat(ui, "ms", &round_trip);
+        ui.horizontal(|ui| {
+            stat(ui, "ms", &round_trip);
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                unpair_control(ui, engine, state);
+            });
+        });
     });
 
     let Some(phone) = phone else {
@@ -243,6 +258,21 @@ fn draw_connected(
             engine.set_animations(!animations);
         }
     });
+}
+
+/// Desvincular pide un segundo toque: deshacerlo obliga a emparejar otra vez.
+fn unpair_control(ui: &mut egui::Ui, engine: &Engine, state: &mut PhoneState) {
+    const CONFIRM_SECONDS: f32 = 4.0;
+
+    let confirming = state.unpair_until.is_some_and(|until| state.now < until);
+    if confirming {
+        if pill(ui, "¿Seguro?", TOUCH, true).clicked() {
+            state.unpair_until = None;
+            let _ = engine.unpair();
+        }
+    } else if pill(ui, "Desvincular", TOUCH, false).clicked() {
+        state.unpair_until = Some(state.now + CONFIRM_SECONDS);
+    }
 }
 
 fn permission_row(ui: &mut egui::Ui, title: &str, enabled: bool, open: impl FnOnce()) {

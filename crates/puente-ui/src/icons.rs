@@ -17,6 +17,8 @@ pub enum Icon {
     Stop,
     Bell,
     Panels,
+    Check,
+    Unlink,
 }
 
 /// Convierte coordenadas de 0 a 1 en puntos dentro de `rect`.
@@ -90,6 +92,13 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             for x in [0.36, 0.64] {
                 line(vec![at(x, 0.14), at(x, 0.86)]);
             }
+        }
+        Icon::Check => line(vec![at(0.2, 0.54), at(0.42, 0.76), at(0.8, 0.28)]),
+        Icon::Unlink => {
+            for x in [0.24, 0.76] {
+                painter.circle_stroke(at(x, 0.5), rect.width() * 0.16, stroke);
+            }
+            line(vec![at(0.42, 0.84), at(0.58, 0.16)]);
         }
         Icon::Close => {
             line(vec![at(0.28, 0.28), at(0.72, 0.72)]);

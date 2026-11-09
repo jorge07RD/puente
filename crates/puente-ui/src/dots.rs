@@ -4,7 +4,7 @@ use std::f32::consts::{FRAC_PI_2, TAU};
 
 use eframe::egui::{Color32, Painter, Pos2, Rect, Vec2, pos2, vec2};
 
-use crate::theme::{ACCENT, DOT_OFF, INK};
+use crate::theme::{ACCENT, DOT_OFF, INK, LOADING};
 
 const GLYPH_HEIGHT: usize = 7;
 /// Por debajo de esta distancia entre puntos las cifras se empastan.
@@ -55,6 +55,14 @@ const fn glyph(character: char) -> Option<[u8; GLYPH_HEIGHT]> {
         '-' => [0b00000, 0b00000, 0b00000, 0b11111, 0b00000, 0b00000, 0b00000],
         _ => return None,
     })
+}
+
+/// Filas de un carácter, o vacías si no tiene matriz.
+pub(crate) fn glyph_rows(character: char) -> [u8; GLYPH_HEIGHT] {
+    if character == ':' {
+        return [0, 0, 0b00100, 0, 0b00100, 0, 0];
+    }
+    glyph(character).unwrap_or([0; GLYPH_HEIGHT])
 }
 
 /// Ancho en columnas: las cifras son todas iguales para que no bailen al cambiar.
@@ -132,6 +140,53 @@ pub fn paint_ring(painter: &Painter, center: Pos2, radius: f32, dots: usize, fra
     }
 }
 
+const CHARGE_TRAIL: f32 = 8.0;
+const CHARGE_SPILL_DOTS: usize = 3;
+/// Parte del ciclo que tarda la estela en llegar a la punta.
+const CHARGE_SWEEP: f32 = 0.72;
+
+/// Cuánto verde lleva un punto del anillo de carga, de 0 a 1. `lit` son los puntos
+/// encendidos; `phase` recorre el ciclo, o es `None` si no hay animaciones.
+fn charge_glow(index: usize, lit: usize, phase: Option<f32>) -> f32 {
+    if index + 1 == lit {
+        return 1.0;
+    }
+    let Some(phase) = phase else {
+        return 0.0;
+    };
+    if index < lit {
+        // La estela avanza desde el inicio del anillo hasta la punta.
+        let comet = ease_out(stage(phase, 0.0, CHARGE_SWEEP)) * (lit.max(1) - 1) as f32;
+        let behind = comet - index as f32;
+        if phase < CHARGE_SWEEP && (0.0..CHARGE_TRAIL).contains(&behind) {
+            return 1.0 - behind / CHARGE_TRAIL;
+        }
+        return 0.0;
+    }
+    // Al llegar, se encienden un momento los siguientes puntos apagados.
+    let offset = index - lit;
+    if offset >= CHARGE_SPILL_DOTS || phase < CHARGE_SWEEP {
+        return 0.0;
+    }
+    let front = stage(phase, CHARGE_SWEEP, 1.0) * CHARGE_SPILL_DOTS as f32;
+    (1.0 - (front - offset as f32 - 0.5).abs()).clamp(0.0, 1.0)
+}
+
+/// Anillo mientras el móvil carga: como [`paint_ring`], con la punta verde y una
+/// estela que la recorre. Con `phase` en `None` queda quieto.
+pub fn paint_charging_ring(painter: &Painter, center: Pos2, radius: f32, dots: usize, fraction: f32, phase: Option<f32>) {
+    let lit = (fraction.clamp(0.0, 1.0) * dots as f32).round().max(1.0) as usize;
+    let size = TAU * radius / dots as f32 * DOT_RADIUS_RATIO;
+    for index in 0..dots {
+        let angle = index as f32 / dots as f32 * TAU - FRAC_PI_2;
+        let position = center + vec2(angle.cos(), angle.sin()) * radius;
+        let glow = charge_glow(index, lit, phase);
+        let base = if index < lit { INK } else { DOT_OFF };
+        let base_size = if index < lit { size } else { size * 0.7 };
+        painter.circle_filled(position, base_size * (1.0 + glow * 0.3), mix(base, LOADING, glow));
+    }
+}
+
 /// Onda espejada: cada columna apila puntos según su nivel, de 0 a 1.
 pub fn paint_wave(painter: &Painter, rect: Rect, levels: &[f32], pitch: f32) {
     if levels.is_empty() {
@@ -161,10 +216,15 @@ pub fn paint_wave(painter: &Painter, rect: Rect, levels: &[f32], pitch: f32) {
     }
 }
 
+const DECK_COLUMNS: usize = 41;
+const HANGER_EVERY: usize = 4;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BridgeState {
     /// Tendido desde la PC hasta `reach`, de 0 a 1, buscando la otra orilla.
     Reaching { reach: f32 },
+    /// Construyéndose por etapas; `progress` recorre el ciclo de 0 a 1.
+    Building { progress: f32 },
     /// Completo y sin tráfico.
     Linked,
     /// Completo, con un paquete en la posición `position`, de 0 a 1.
@@ -173,8 +233,10 @@ pub enum BridgeState {
 
 /// El motivo de la app: un puente de puntos entre la PC y el móvil.
 pub fn paint_bridge(painter: &Painter, rect: Rect, state: BridgeState) {
-    const DECK_COLUMNS: usize = 41;
-    const HANGER_EVERY: usize = 4;
+    if let BridgeState::Building { progress } = state {
+        paint_building(painter, rect, progress);
+        return;
+    }
 
     let pitch = rect.width() / (DECK_COLUMNS - 1) as f32;
     let radius = pitch * DOT_RADIUS_RATIO;
@@ -219,7 +281,100 @@ pub fn paint_bridge(painter: &Painter, rect: Rect, state: BridgeState) {
             let x = rect.left() + position.clamp(0.0, 1.0) * rect.width();
             painter.circle_filled(pos2(x, deck_y), radius * 1.7, ACCENT);
         }
-        BridgeState::Linked => {}
+        BridgeState::Linked | BridgeState::Building { .. } => {}
+    }
+}
+
+fn stage(progress: f32, start: f32, end: f32) -> f32 {
+    ((progress - start) / (end - start)).clamp(0.0, 1.0)
+}
+
+fn ease_out(value: f32) -> f32 {
+    1.0 - (1.0 - value).powi(3)
+}
+
+/// Cuánto ha avanzado cada etapa de la construcción, de 0 a 1.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct BuildStages {
+    deck: f32,
+    arch: f32,
+    hangers: f32,
+    pulse: f32,
+    leaving: f32,
+}
+
+impl BuildStages {
+    fn at(progress: f32) -> Self {
+        Self {
+            deck: ease_out(stage(progress, 0.0, 0.42)),
+            arch: ease_out(stage(progress, 0.36, 0.62)),
+            hangers: ease_out(stage(progress, 0.54, 0.72)),
+            pulse: stage(progress, 0.70, 0.90),
+            leaving: stage(progress, 0.90, 1.0),
+        }
+    }
+}
+
+fn mix(from: Color32, to: Color32, amount: f32) -> Color32 {
+    let amount = amount.clamp(0.0, 1.0);
+    let channel = |a: u8, b: u8| (f32::from(a) + (f32::from(b) - f32::from(a)) * amount).round() as u8;
+    Color32::from_rgb(channel(from.r(), to.r()), channel(from.g(), to.g()), channel(from.b(), to.b()))
+}
+
+fn paint_building(painter: &Painter, rect: Rect, progress: f32) {
+    const TRAIL_COLUMNS: f32 = 6.0;
+    const PULSE_WIDTH: f32 = 0.14;
+
+    let stages = BuildStages::at(progress);
+    let pitch = rect.width() / (DECK_COLUMNS - 1) as f32;
+    let radius = pitch * DOT_RADIUS_RATIO;
+    let deck_y = rect.bottom() - pitch;
+    let arch_height = (rect.height() - pitch * 3.0).max(pitch);
+    let front = stages.deck * (DECK_COLUMNS - 1) as f32;
+
+    for column in 0..DECK_COLUMNS {
+        let x = rect.left() + column as f32 * pitch;
+        let along = column as f32 / (DECK_COLUMNS - 1) as f32;
+
+        if column as f32 > front || along < stages.leaving {
+            painter.circle_filled(pos2(x, deck_y), radius * 0.7, DOT_OFF);
+            continue;
+        }
+
+        let mut color = INK;
+        let behind = front - column as f32;
+        if stages.deck < 1.0 && behind < TRAIL_COLUMNS {
+            color = mix(LOADING, INK, behind / TRAIL_COLUMNS);
+        }
+        if stages.pulse > 0.0 && stages.pulse < 1.0 {
+            let distance = (along - stages.pulse).abs();
+            if distance < PULSE_WIDTH {
+                color = mix(LOADING, color, distance / PULSE_WIDTH);
+            }
+        }
+        painter.circle_filled(pos2(x, deck_y), radius, color);
+
+        let from_center = (2.0 * along - 1.0).abs();
+        if stages.arch <= 0.0 || from_center < 1.0 - stages.arch {
+            continue;
+        }
+        let curve = 1.0 - (2.0 * along - 1.0).powi(2);
+        let arch_y = deck_y - curve * arch_height;
+        painter.circle_filled(pos2(x, arch_y), radius, color);
+
+        if column % HANGER_EVERY == 0 {
+            let rows = ((deck_y - arch_y) / pitch).floor() as usize;
+            let shown = (rows as f32 * stages.hangers).round() as usize;
+            for row in 1..shown.min(rows) {
+                let y = arch_y + row as f32 * pitch;
+                painter.circle_filled(pos2(x, y), radius * 0.7, color.gamma_multiply(0.5));
+            }
+        }
+    }
+
+    if stages.deck < 1.0 {
+        let head = rect.left() + front * pitch;
+        painter.circle_filled(pos2(head, deck_y), radius * 1.8, LOADING);
     }
 }
 
@@ -318,6 +473,50 @@ mod tests {
         for character in 'A'..='Z' {
             assert!(glyph(character).is_some(), "falta el carácter {character}");
         }
+    }
+
+    #[test]
+    fn the_bridge_is_built_in_order_and_then_clears() {
+        let start = BuildStages::at(0.0);
+        assert_eq!((start.deck, start.arch, start.hangers, start.pulse), (0.0, 0.0, 0.0, 0.0));
+
+        // El arco empieza cuando el tablero está casi tendido.
+        assert!(BuildStages::at(0.4).deck > 0.9);
+        assert!(BuildStages::at(0.3).arch == 0.0);
+
+        // La onda recorre un puente ya terminado.
+        let testing = BuildStages::at(0.8);
+        assert_eq!((testing.deck, testing.arch, testing.hangers), (1.0, 1.0, 1.0));
+        assert!(testing.pulse > 0.0 && testing.pulse < 1.0);
+        assert_eq!(testing.leaving, 0.0);
+
+        assert_eq!(BuildStages::at(1.0).leaving, 1.0);
+    }
+
+    #[test]
+    fn the_charging_tip_stays_green_and_the_comet_travels_towards_it() {
+        const LIT: usize = 40;
+        assert_eq!(charge_glow(LIT - 1, LIT, None), 1.0);
+        assert_eq!(charge_glow(10, LIT, None), 0.0);
+        assert_eq!(charge_glow(LIT - 1, LIT, Some(0.3)), 1.0);
+
+        // La estela empieza al principio del anillo.
+        assert!(charge_glow(0, LIT, Some(0.0)) > 0.9);
+        assert_eq!(charge_glow(30, LIT, Some(0.0)), 0.0);
+    }
+
+    #[test]
+    fn charge_spills_into_the_next_dark_dots_only_at_the_end() {
+        const LIT: usize = 40;
+        assert_eq!(charge_glow(LIT, LIT, Some(0.5)), 0.0);
+        assert!(charge_glow(LIT, LIT, Some(0.76)) > 0.0);
+        assert_eq!(charge_glow(LIT + CHARGE_SPILL_DOTS, LIT, Some(0.9)), 0.0);
+    }
+
+    #[test]
+    fn mixing_colors_reaches_both_ends() {
+        assert_eq!(mix(INK, LOADING, 0.0), INK);
+        assert_eq!(mix(INK, LOADING, 1.0), LOADING);
     }
 
     #[test]

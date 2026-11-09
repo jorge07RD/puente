@@ -1,5 +1,6 @@
 //! Pantallas egui compartidas entre la PC y el móvil.
 
+mod demo;
 mod desktop;
 pub mod dots;
 mod gallery;
@@ -9,6 +10,7 @@ pub mod parts;
 mod phone;
 pub mod theme;
 
+pub use demo::{Demo, DemoKind};
 pub use gallery::Gallery;
 
 use std::path::PathBuf;
@@ -23,6 +25,9 @@ use crate::theme::{ACCENT, GROUND};
 
 /// Cada cuánto se redibuja mientras hay algo animándose.
 const ANIMATION_FRAME: Duration = Duration::from_millis(40);
+/// Android descarta los cuadros dibujados antes de que su superficie esté lista:
+/// si no se vuelve a dibujar, la pantalla de arranque se queda puesta.
+const PHONE_REFRESH: Duration = Duration::from_millis(250);
 
 /// Una imagen ya decodificada de la pantalla del móvil.
 pub struct ScreenFrame {
@@ -57,12 +62,22 @@ pub struct Transfer {
     pub fraction: f32,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct RecentFile {
+    pub name: String,
+    pub delivered: bool,
+    /// De 1 a 0 cuando la línea está a punto de desaparecer.
+    pub opacity: f32,
+}
+
 /// PC: acciones que dependen del escritorio.
 pub trait DesktopActions {
     fn pick_and_send_file(&self);
     fn send_files(&self, paths: Vec<PathBuf>);
     /// El archivo que se está enviando ahora, si hay alguno.
     fn transfer(&self) -> Option<Transfer>;
+    /// Los envíos terminados hace poco, del más reciente al más antiguo.
+    fn recent_files(&self) -> Vec<RecentFile>;
     fn clipboard_sync(&self) -> bool;
     fn set_clipboard_sync(&self, enabled: bool);
     /// Niveles recientes del audio, de 0 a 1; vacío si no suena nada.
@@ -126,6 +141,7 @@ impl PuenteApp {
 fn is_animating(view: &View) -> bool {
     view.animations
         && (view.mirroring
+            || view.battery.is_some_and(|(_, charging)| charging)
             || match &view.status {
                 Status::Searching | Status::Connecting { .. } => true,
                 Status::Pairing { answered, .. } => *answered,
@@ -158,6 +174,9 @@ impl eframe::App for PuenteApp {
                     // Sin transmisión no debe quedar a la vista la última imagen recibida.
                     if !view.mirroring {
                         self.texture = None;
+                    }
+                    if self.role == Role::Phone {
+                        context.request_repaint_after(PHONE_REFRESH);
                     }
                     let settling = view.animations
                         && (self.desktop_state.is_settling(time) || self.phone_state.is_settling(time));

@@ -9,7 +9,7 @@ use eframe::EventLoopBuilderHook;
 use eframe::egui;
 use winit::platform::x11::EventLoopBuilderExtX11;
 use puente_core::{Config, Engine, Role};
-use puente_ui::{Gallery, PuenteApp};
+use puente_ui::{Demo, DemoKind, Gallery, PuenteApp};
 
 fn data_dir() -> PathBuf {
     let config_home = std::env::var_os("XDG_CONFIG_HOME")
@@ -51,6 +51,18 @@ fn use_x11(backend: Option<&str>, has_x11_display: bool) -> bool {
     backend != Some("wayland") && has_x11_display
 }
 
+/// `--demo <carpeta>` y `--demo-phone <carpeta>` graban las imágenes del README.
+fn demo_request(arguments: &[String]) -> Option<(DemoKind, PathBuf)> {
+    arguments.windows(2).find_map(|pair| {
+        let kind = match pair[0].as_str() {
+            "--demo" => DemoKind::Desktop,
+            "--demo-phone" => DemoKind::Phone,
+            _ => return None,
+        };
+        Some((kind, PathBuf::from(&pair[1])))
+    })
+}
+
 fn main() -> eframe::Result {
     let backend = std::env::var("PUENTE_BACKEND").ok();
     let x11 = use_x11(backend.as_deref(), std::env::var_os("DISPLAY").is_some());
@@ -65,6 +77,25 @@ fn main() -> eframe::Result {
             .with_inner_size([1100.0, 860.0]),
         ..Default::default()
     };
+    let arguments: Vec<String> = std::env::args().collect();
+    if let Some((kind, output)) = demo_request(&arguments) {
+        let size = match kind {
+            DemoKind::Desktop => [1280.0, 780.0],
+            DemoKind::Phone => [420.0, 900.0],
+        };
+        let mut options = options;
+        options.viewport = options.viewport.with_inner_size(size).with_resizable(false);
+        return eframe::run_native(
+            "Puente",
+            options,
+            Box::new(move |creation| {
+                Demo::new(&creation.egui_ctx, kind, output)
+                    .map(|demo| Box::new(demo) as Box<dyn eframe::App>)
+                    .map_err(Into::into)
+            }),
+        );
+    }
+
     if std::env::args().any(|argument| argument == "--gallery") {
         return eframe::run_native(
             "Puente",

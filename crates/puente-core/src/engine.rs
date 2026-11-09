@@ -105,6 +105,8 @@ pub struct View {
     /// PC: megabits por segundo de vídeo que están llegando.
     pub video_mbps: Option<f32>,
     pub animations: bool,
+    /// PC: el audio del móvil se reproduce aquí.
+    pub audio_enabled: bool,
 }
 
 /// PC: lo que hay que reflejar en el escritorio.
@@ -113,6 +115,10 @@ pub enum DesktopEvent {
     Notification(NotificationInfo),
     Clipboard(String),
     FileReceived(PathBuf, String),
+    /// El móvil confirmó que guardó este envío.
+    FileDelivered(u32),
+    /// El móvil no pudo guardar este envío.
+    FileFailed(u32),
 }
 
 enum Command {
@@ -120,6 +126,7 @@ enum Command {
 }
 
 struct SessionHandle {
+    peer: Fingerprint,
     control: mpsc::Sender<Message>,
     video: mpsc::Sender<VideoPacket>,
     audio: mpsc::Sender<Vec<u8>>,
@@ -137,7 +144,10 @@ struct PhoneState {
 }
 
 struct SessionState {
+    peer: Fingerprint,
     waiting_for_key: bool,
+    /// Tras el aviso de fin, lo que aún llegue son restos de la cola del móvil.
+    stream_ended: bool,
     video_rate: RateMeter,
     incoming: Incoming,
 }
@@ -190,6 +200,23 @@ impl Shared {
             .is_paired(fingerprint)
     }
 
+    fn forget_peer(&self, fingerprint: Fingerprint) -> Result<()> {
+        self.store
+            .lock()
+            .expect("almacén disponible")
+            .remove(fingerprint)?;
+        let paired = self.paired();
+        self.update(|view| {
+            view.paired = paired;
+            for found in &mut view.found {
+                if found.fingerprint == fingerprint {
+                    found.paired = false;
+                }
+            }
+        });
+        Ok(())
+    }
+
     fn send_control(&self, message: Message) {
         if let Some(session) = self.session.lock().expect("sesión disponible").as_ref() {
             let _ = session.control.try_send(message);
@@ -200,6 +227,12 @@ impl Shared {
         match frame {
             Frame::Control(message) => self.on_control(message, state),
             Frame::Video(packet) => {
+                if state.stream_ended {
+                    if !packet.is_config() {
+                        return;
+                    }
+                    state.stream_ended = false;
+                }
                 self.measure_video(&packet, state);
                 self.on_video(packet, &mut state.waiting_for_key);
             }
@@ -232,11 +265,14 @@ impl Shared {
             Message::RequestKeyframe => {
                 self.video_out.need_key.store(true, Ordering::SeqCst);
             }
-            Message::MirrorStopped => self.update(|view| {
-                view.mirroring = false;
-                view.video_fps = None;
-                view.video_mbps = None;
-            }),
+            Message::MirrorStopped => {
+                state.stream_ended = true;
+                self.update(|view| {
+                    view.mirroring = false;
+                    view.video_fps = None;
+                    view.video_mbps = None;
+                });
+            }
             Message::Input(input) => self.queue_input(input),
             Message::InputState { enabled } => {
                 self.update(|view| view.input_enabled = enabled);
@@ -248,10 +284,21 @@ impl Shared {
             }
             Message::FileDone { id } => self.on_file_done(id, state),
             Message::FileFailed { id } => {
-                state.incoming.fail(id);
+                // Si no se estaba recibiendo, es un envío nuestro que el otro lado rechazó.
+                if !state.incoming.fail(id) && self.role == Role::Desktop {
+                    let _ = self.desktop_out.send(DesktopEvent::FileFailed(id));
+                }
                 self.update(|view| view.last_file = Some("Falló un envío de archivo".to_string()));
             }
+            Message::FileSaved { id } => {
+                if self.role == Role::Desktop {
+                    let _ = self.desktop_out.send(DesktopEvent::FileDelivered(id));
+                }
+            }
             Message::Clipboard { text } => self.on_clipboard(text),
+            Message::Unpair => {
+                let _ = self.forget_peer(state.peer);
+            }
             other => match self.role {
                 Role::Desktop => self.on_phone_report(other),
                 Role::Phone => {
@@ -281,10 +328,12 @@ impl Shared {
         let received = match state.incoming.finish(id) {
             Ok(received) => received,
             Err(_) => {
+                self.send_control(Message::FileFailed { id });
                 self.update(|view| view.last_file = Some("Un archivo llegó incompleto".to_string()));
                 return;
             }
         };
+        self.send_control(Message::FileSaved { id });
         match self.role {
             Role::Desktop => {
                 let _ = self
@@ -415,6 +464,7 @@ impl Engine {
             video_fps: None,
             video_mbps: None,
             animations: settings.current.animations,
+            audio_enabled: settings.current.audio,
         };
         let (task_out, task_receiver) = std_mpsc::sync_channel(TASK_QUEUE);
         let (audio_in, audio_receiver) = std_mpsc::sync_channel(AUDIO_QUEUE);
@@ -606,6 +656,32 @@ impl Engine {
         self.desktop_receiver.lock().expect("receptor disponible").take()
     }
 
+    /// Deshace el emparejamiento con el dispositivo conectado, en los dos lados.
+    pub fn unpair(&self) -> Result<()> {
+        let peer = {
+            let session = self.shared.session.lock().expect("sesión disponible");
+            let Some(session) = session.as_ref() else {
+                return Ok(());
+            };
+            let _ = session.control.try_send(Message::Unpair);
+            session.peer
+        };
+        self.shared.forget_peer(peer)
+    }
+
+    pub fn audio_enabled(&self) -> bool {
+        self.shared.view.lock().expect("vista disponible").audio_enabled
+    }
+
+    pub fn set_audio_enabled(&self, enabled: bool) {
+        {
+            let mut settings = self.shared.settings.lock().expect("ajustes disponibles");
+            settings.current.audio = enabled;
+            let _ = settings.save();
+        }
+        self.shared.update(|view| view.audio_enabled = enabled);
+    }
+
     pub fn set_animations(&self, enabled: bool) {
         {
             let mut settings = self.shared.settings.lock().expect("ajustes disponibles");
@@ -724,21 +800,7 @@ impl Engine {
     }
 
     pub fn forget(&self, fingerprint: Fingerprint) -> Result<()> {
-        self.shared
-            .store
-            .lock()
-            .expect("almacén disponible")
-            .remove(fingerprint)?;
-        let paired = self.shared.paired();
-        self.shared.update(|view| {
-            view.paired = paired;
-            for found in &mut view.found {
-                if found.fingerprint == fingerprint {
-                    found.paired = false;
-                }
-            }
-        });
-        Ok(())
+        self.shared.forget_peer(fingerprint)
     }
 }
 
@@ -967,6 +1029,7 @@ async fn drive(shared: &Arc<Shared>, secure: Secure, address: SocketAddr) -> Res
         }
     }
     *shared.session.lock().expect("sesión disponible") = Some(SessionHandle {
+        peer,
         control,
         video,
         audio,
@@ -981,7 +1044,9 @@ async fn drive(shared: &Arc<Shared>, secure: Secure, address: SocketAddr) -> Res
     };
     let events = shared.clone();
     let mut state = SessionState {
+        peer,
         waiting_for_key: true,
+        stream_ended: false,
         video_rate: RateMeter::default(),
         incoming: Incoming::new(shared.downloads_dir.clone()),
     };

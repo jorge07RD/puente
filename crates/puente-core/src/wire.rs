@@ -68,7 +68,13 @@ pub enum Message {
     FileFailed {
         id: u32,
     },
+    /// El otro lado ya guardó el archivo completo.
+    FileSaved {
+        id: u32,
+    },
     Command(PhoneCommand),
+    /// El otro lado deshizo el emparejamiento.
+    Unpair,
     /// Registro del móvil, que sin ADB no se podría leer desde la PC.
     Log {
         text: String,
