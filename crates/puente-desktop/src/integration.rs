@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::time::{Duration, Instant};
 
-use puente_core::wire::NotificationInfo;
+use puente_core::wire::{CallInfo, NotificationInfo};
 use puente_core::{DesktopEvent, Engine};
 use puente_ui::{DesktopActions, RecentFile, Transfer};
 
@@ -233,6 +233,7 @@ fn run(engine: Arc<Engine>, sync: Arc<AtomicBool>, events: Receiver<DesktopEvent
     loop {
         match events.recv_timeout(CLIPBOARD_CHECK_EVERY) {
             Ok(DesktopEvent::Notification(info)) => show_notification(&info),
+            Ok(DesktopEvent::Call(call)) => show_call(&call),
             Ok(DesktopEvent::FileReceived(path, name)) => show_file_received(&path, &name),
             Ok(DesktopEvent::FileDelivered(id)) => {
                 sends.lock().expect("envíos disponibles").resolve(id, true, Instant::now());
@@ -275,6 +276,14 @@ fn show_notification(info: &NotificationInfo) {
         .appname("Puente")
         .summary(&format!("{}: {}", info.app, info.title))
         .body(&escape_markup(&info.text))
+        .show();
+}
+
+fn show_call(call: &CallInfo) {
+    let _ = notify_rust::Notification::new()
+        .appname("Puente")
+        .summary(&format!("Llamada de {}", call.caller))
+        .body(&escape_markup(&call.app))
         .show();
 }
 

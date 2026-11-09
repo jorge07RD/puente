@@ -9,8 +9,8 @@ use std::time::{Duration, Instant};
 use puente_core::pairing::{PairPrompt, establish};
 use puente_core::tls::TlsContext;
 use puente_core::wire::{
-    Input, MediaAction, Message, NavAction, NotificationInfo, PhoneCommand, VideoPacket, read_message,
-    write_message,
+    CallInfo, Input, MediaAction, Message, NavAction, NotificationInfo, PhoneCommand, ReplyOutcome, VideoPacket,
+    read_message, write_message,
 };
 use puente_core::DesktopEvent;
 use puente_core::{Config, Engine, Error, Identity, PeerStore, Role, Status, View};
@@ -188,6 +188,7 @@ fn phone_reports_reach_the_desktop() {
         app: "App".to_string(),
         title: "Hola".to_string(),
         text: "Mundo".to_string(),
+        can_reply: false,
     };
     phone.post_notification(info.clone());
     phone.set_battery(77, true);
@@ -359,6 +360,99 @@ fn the_audio_choice_survives_a_restart() {
     drop(first);
     let second = engine(Role::Desktop, dir.path(), free_port());
     assert!(!second.audio_enabled());
+}
+
+fn sample_call() -> CallInfo {
+    CallInfo {
+        key: "llamada".to_string(),
+        app: "Teléfono".to_string(),
+        caller: "Ana".to_string(),
+        can_answer: true,
+        can_decline: true,
+    }
+}
+
+#[test]
+fn an_incoming_call_shows_on_the_desktop_until_it_ends() {
+    let desktop_dir = tempfile::tempdir().unwrap();
+    let phone_dir = tempfile::tempdir().unwrap();
+    let port = free_port();
+    let desktop = engine(Role::Desktop, desktop_dir.path(), port);
+    let phone = engine(Role::Phone, phone_dir.path(), port);
+    let events = desktop.take_desktop_events().unwrap();
+    pair(&desktop, &phone);
+
+    phone.report_call(sample_call());
+    let view = wait_for(&desktop, "llamada", |v| v.call.is_some());
+    assert_eq!(view.call, Some(sample_call()));
+    assert_eq!(
+        events.recv_timeout(Duration::from_secs(5)).unwrap(),
+        DesktopEvent::Call(sample_call())
+    );
+
+    // El fin de otra llamada no borra la que sigue sonando.
+    phone.end_call("otra".to_string());
+    sleep(Duration::from_millis(200));
+    assert!(desktop.view().call.is_some());
+
+    phone.end_call("llamada".to_string());
+    wait_for(&desktop, "fin de la llamada", |v| v.call.is_none());
+}
+
+#[test]
+fn a_call_already_ringing_is_shown_when_the_desktop_connects() {
+    let desktop_dir = tempfile::tempdir().unwrap();
+    let phone_dir = tempfile::tempdir().unwrap();
+    let port = free_port();
+    let desktop = engine(Role::Desktop, desktop_dir.path(), port);
+    let phone = engine(Role::Phone, phone_dir.path(), port);
+
+    phone.report_call(sample_call());
+    pair(&desktop, &phone);
+    wait_for(&desktop, "llamada al conectar", |v| v.call.is_some());
+}
+
+#[test]
+fn desktop_answers_become_phone_tasks() {
+    let desktop_dir = tempfile::tempdir().unwrap();
+    let phone_dir = tempfile::tempdir().unwrap();
+    let port = free_port();
+    let desktop = engine(Role::Desktop, desktop_dir.path(), port);
+    let phone = engine(Role::Phone, phone_dir.path(), port);
+    pair(&desktop, &phone);
+    let wait = Duration::from_secs(5);
+
+    desktop.send_command(PhoneCommand::Reply {
+        key: "k".to_string(),
+        text: "Voy".to_string(),
+    });
+    let task: serde_json::Value = serde_json::from_str(&phone.next_task(wait).unwrap()).unwrap();
+    assert_eq!(task["command"], "reply");
+    assert_eq!(task["key"], "k");
+    assert_eq!(task["text"], "Voy");
+
+    desktop.send_command(PhoneCommand::CallAction {
+        key: "llamada".to_string(),
+        answer: false,
+    });
+    let task: serde_json::Value = serde_json::from_str(&phone.next_task(wait).unwrap()).unwrap();
+    assert_eq!(task["command"], "call_action");
+    assert_eq!(task["answer"], false);
+
+    phone.report_reply("k".to_string(), true);
+    let view = wait_for(&desktop, "resultado", |v| v.last_reply.is_some());
+    let expected = ReplyOutcome {
+        key: "k".to_string(),
+        delivered: true,
+    };
+    assert_eq!(view.last_reply, Some(expected));
+}
+
+#[test]
+fn notifications_from_older_versions_simply_cannot_be_replied_to() {
+    let json = r#"{"key":"k","app":"a","title":"t","text":"x"}"#;
+    let info: NotificationInfo = serde_json::from_str(json).unwrap();
+    assert!(!info.can_reply);
 }
 
 #[test]

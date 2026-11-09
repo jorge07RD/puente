@@ -22,7 +22,8 @@ use crate::settings::SettingsFile;
 use crate::telemetry::RateMeter;
 use crate::transfers::Incoming;
 use crate::wire::{
-    Discovery, Frame, Input, MediaInfo, Message, NotificationInfo, PhoneCommand, VideoPacket,
+    CallInfo, Discovery, Frame, Input, MediaInfo, Message, NotificationInfo, PhoneCommand, ReplyOutcome,
+    VideoPacket,
 };
 use crate::{Error, Fingerprint, Identity, PROTOCOL_VERSION, Peer, PeerStore, Result, Role, session};
 
@@ -107,6 +108,10 @@ pub struct View {
     pub animations: bool,
     /// PC: el audio del móvil se reproduce aquí.
     pub audio_enabled: bool,
+    /// PC: llamada entrante en este momento.
+    pub call: Option<CallInfo>,
+    /// PC: resultado de la última respuesta enviada.
+    pub last_reply: Option<ReplyOutcome>,
 }
 
 /// PC: lo que hay que reflejar en el escritorio.
@@ -119,6 +124,7 @@ pub enum DesktopEvent {
     FileDelivered(u32),
     /// El móvil no pudo guardar este envío.
     FileFailed(u32),
+    Call(CallInfo),
 }
 
 enum Command {
@@ -139,6 +145,7 @@ struct PhoneState {
     battery: Option<(u8, bool)>,
     media: Option<MediaInfo>,
     notifications: Vec<NotificationInfo>,
+    call: Option<CallInfo>,
     /// Registros escritos mientras no había PC conectada.
     logs: Vec<String>,
 }
@@ -388,6 +395,17 @@ impl Shared {
             }
             Message::Media { info } => self.update(|view| view.media = info),
             Message::Log { text } => self.append_phone_log(&text),
+            Message::Call(call) => {
+                let shown = call.clone();
+                self.update(|view| view.call = Some(call));
+                let _ = self.desktop_out.send(DesktopEvent::Call(shown));
+            }
+            Message::CallEnded { key } => self.update(|view| {
+                if view.call.as_ref().is_some_and(|call| call.key == key) {
+                    view.call = None;
+                }
+            }),
+            Message::ReplyResult(outcome) => self.update(|view| view.last_reply = Some(outcome)),
             _ => {}
         }
     }
@@ -465,6 +483,8 @@ impl Engine {
             video_mbps: None,
             animations: settings.current.animations,
             audio_enabled: settings.current.audio,
+            call: None,
+            last_reply: None,
         };
         let (task_out, task_receiver) = std_mpsc::sync_channel(TASK_QUEUE);
         let (audio_in, audio_receiver) = std_mpsc::sync_channel(AUDIO_QUEUE);
@@ -734,6 +754,29 @@ impl Engine {
             state.notifications.push(info.clone());
         }
         self.shared.send_control(Message::Notification(info));
+    }
+
+    /// Móvil: hay una llamada entrante.
+    pub fn report_call(&self, call: CallInfo) {
+        self.phone_state().call = Some(call.clone());
+        self.shared.send_control(Message::Call(call));
+    }
+
+    /// Móvil: la llamada terminó o ya se contestó.
+    pub fn end_call(&self, key: String) {
+        {
+            let mut state = self.phone_state();
+            if state.call.as_ref().is_some_and(|call| call.key == key) {
+                state.call = None;
+            }
+        }
+        self.shared.send_control(Message::CallEnded { key });
+    }
+
+    /// Móvil: informa de si la respuesta llegó a la app de la notificación.
+    pub fn report_reply(&self, key: String, delivered: bool) {
+        self.shared
+            .send_control(Message::ReplyResult(ReplyOutcome { key, delivered }));
     }
 
     /// Móvil: deja una línea en el registro que guarda la PC.
@@ -1027,6 +1070,9 @@ async fn drive(shared: &Arc<Shared>, secure: Secure, address: SocketAddr) -> Res
         for info in &state.notifications {
             let _ = control.try_send(Message::Notification(info.clone()));
         }
+        if let Some(call) = &state.call {
+            let _ = control.try_send(Message::Call(call.clone()));
+        }
     }
     *shared.session.lock().expect("sesión disponible") = Some(SessionHandle {
         peer,
@@ -1076,6 +1122,8 @@ async fn drive(shared: &Arc<Shared>, secure: Secure, address: SocketAddr) -> Res
             view.notifications.clear();
             view.battery = None;
             view.media = None;
+            view.call = None;
+            view.last_reply = None;
         }),
         // Un gesto a medias no puede quedarse "pulsando" si se corta la conexión.
         Role::Phone => shared.deliver_input(&Input::Cancel),

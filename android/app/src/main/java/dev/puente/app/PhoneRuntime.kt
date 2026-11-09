@@ -84,6 +84,18 @@ internal object PhoneRuntime {
                     val key = task.getString("key")
                     handler.post { NotifService.instance?.cancelNotification(key) }
                 }
+                "reply" -> {
+                    val key = task.getString("key")
+                    val value = task.getString("text")
+                    handler.post {
+                        NotifService.instance?.reply(key, value) ?: Native.onReplyResult(key, false)
+                    }
+                }
+                "call_action" -> {
+                    val key = task.getString("key")
+                    val answer = task.getBoolean("answer")
+                    handler.post { NotifService.instance?.handleCall(key, answer) }
+                }
                 "ring" -> {
                     val on = task.getBoolean("on")
                     handler.post { setRinging(app, on) }
