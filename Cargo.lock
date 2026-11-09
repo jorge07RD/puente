@@ -2297,7 +2297,7 @@ checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 
 [[package]]
 name = "puente-android"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "android-activity",
  "android_logger",
@@ -2311,7 +2311,7 @@ dependencies = [
 
 [[package]]
 name = "puente-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "rcgen",
  "ring",
@@ -2326,7 +2326,7 @@ dependencies = [
 
 [[package]]
 name = "puente-desktop"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "arboard",
  "cpal",
@@ -2342,7 +2342,7 @@ dependencies = [
 
 [[package]]
 name = "puente-ui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "eframe",
  "puente-core",
