@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Compila la librería Rust para Android y genera el APK de depuración.
+# Compila la librería Rust para Android y genera el APK.
+# Uso: build-android.sh [debug|release]; por defecto, debug.
 # Si existe un Rust aislado en ~/.local/share/puente lo usa; si no, el del sistema.
 # Se puede cambiar cada ruta con ANDROID_HOME, ANDROID_NDK_HOME y PUENTE_JAVA_HOME.
 set -euo pipefail
@@ -21,6 +22,7 @@ cd "$root"
 cargo ndk -t arm64-v8a -P 29 -o android/app/src/main/jniLibs build -p puente-android --release
 
 cd "$root/android"
-./gradlew --console=plain assembleDebug
+variant="${1:-debug}"
+./gradlew --console=plain "assemble${variant^}"
 
-echo "APK: $root/android/app/build/outputs/apk/debug/app-debug.apk"
+echo "APK: $root/android/app/build/outputs/apk/$variant/app-$variant.apk"

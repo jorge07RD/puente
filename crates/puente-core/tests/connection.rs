@@ -391,9 +391,12 @@ fn identity_survives_a_restart() {
     let second = Identity::load_or_create(dir.path(), "a").unwrap();
     assert_eq!(first.fingerprint, second.fingerprint);
 
-    use std::os::unix::fs::PermissionsExt;
-    let key = std::fs::metadata(dir.path().join("identity.key.der")).unwrap();
-    assert_eq!(key.permissions().mode() & 0o777, 0o600);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let key = std::fs::metadata(dir.path().join("identity.key.der")).unwrap();
+        assert_eq!(key.permissions().mode() & 0o777, 0o600);
+    }
 }
 
 struct Device {

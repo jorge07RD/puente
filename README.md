@@ -89,6 +89,18 @@ flowchart LR
 
 Todo está escrito en **Rust** con [egui](https://github.com/emilk/egui), compilado para escritorio y para Android desde el mismo código. Solo hay una capa fina en Kotlin para las clases que Android exige, como los servicios de captura y Accesibilidad.
 
+## Descargar
+
+Descarga la última versión desde [Releases](https://github.com/jorge07RD/puente/releases/latest):
+
+| Plataforma | Archivo | Cómo instalar |
+|---|---|---|
+| **Android** | `puente-*-android-arm64.apk` | Ábrelo en el móvil. Play Protect avisará por ser una app instalada a mano |
+| **Linux** | `puente-*-linux-x86_64.tar.gz` | Descomprime y ejecuta `./install.sh` |
+| **Windows** (experimental) | `puente-*-windows-x86_64.zip` | Descomprime y abre `puente.exe`; permite el acceso en el firewall |
+
+La versión de Windows compila y pasa las pruebas automáticas, pero aún no se ha probado con un móvil real.
+
 ## Requisitos
 
 | | Necesitas |
@@ -104,7 +116,7 @@ sudo ufw allow 1714/tcp
 sudo ufw allow 1714/udp
 ```
 
-## Compilar e instalar
+## Compilar desde el código
 
 Dependencias en Arch Linux:
 

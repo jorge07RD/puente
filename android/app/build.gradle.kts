@@ -42,6 +42,9 @@ android {
             getByName("debug") {
                 signingConfig = signingConfigs.getByName("puente")
             }
+            getByName("release") {
+                signingConfig = signingConfigs.getByName("puente")
+            }
         }
     }
 

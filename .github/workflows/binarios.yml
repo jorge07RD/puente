@@ -1,0 +1,59 @@
+name: Binarios
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencias
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm cmake clang pkg-config libasound2-dev libgl1-mesa-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxkbcommon-dev libwayland-dev
+      - run: rustup update stable
+      - name: Pruebas
+        run: cargo test --workspace
+      - name: Empaquetar
+        run: |
+          cargo build -p puente-desktop --release
+          version=$(sed -nE 's/^version = "(.*)"/\1/p' Cargo.toml | head -1)
+          name="puente-$version-linux-x86_64"
+          mkdir "$name"
+          cp target/release/puente packaging/linux/install.sh assets/puente.svg LICENSE "$name/"
+          cp crates/puente-ui/assets/fonts/OFL.txt "$name/OFL-MartianMono.txt"
+          tar czf "$name.tar.gz" "$name"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: puente-*-linux-x86_64.tar.gz
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencias
+        run: |
+          choco install nasm -y --no-progress
+          "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - run: rustup update stable
+      - name: Pruebas
+        run: cargo test --workspace
+      - name: Empaquetar
+        shell: pwsh
+        run: |
+          cargo build -p puente-desktop --release
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
+          $name = "puente-$version-windows-x86_64"
+          New-Item -ItemType Directory $name | Out-Null
+          Copy-Item target/release/puente.exe, LICENSE $name
+          Copy-Item crates/puente-ui/assets/fonts/OFL.txt "$name/OFL-MartianMono.txt"
+          Compress-Archive -Path $name -DestinationPath "$name.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: puente-*-windows-x86_64.zip

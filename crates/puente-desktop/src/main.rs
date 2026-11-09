@@ -1,3 +1,5 @@
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 mod audio;
 mod decoder;
 mod integration;
@@ -5,24 +7,22 @@ mod integration;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use eframe::EventLoopBuilderHook;
 use eframe::egui;
-use winit::platform::x11::EventLoopBuilderExtX11;
 use puente_core::{Config, Engine, Role};
 use puente_ui::{Demo, DemoKind, Gallery, PuenteApp};
 
 fn data_dir() -> PathBuf {
-    let config_home = std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
-        .unwrap_or_else(|| PathBuf::from("."));
-    config_home.join("puente")
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("puente")
 }
 
 fn device_name() -> String {
     std::fs::read_to_string("/proc/sys/kernel/hostname")
         .map(|name| name.trim().to_string())
-        .unwrap_or_else(|_| "PC".to_string())
+        .ok()
+        .or_else(|| std::env::var("COMPUTERNAME").ok())
+        .unwrap_or_else(|| "PC".to_string())
 }
 
 fn build_app(context: egui::Context) -> PuenteApp {
@@ -44,6 +44,7 @@ fn build_app(context: egui::Context) -> PuenteApp {
         .with_desktop_actions(Box::new(integration))
 }
 
+#[cfg(target_os = "linux")]
 /// `winit` solo recibe archivos arrastrados por X11, así que se prefiere XWayland
 /// si existe. `PUENTE_BACKEND=wayland` lo evita, a costa de no poder arrastrar;
 /// sirve para pantallas con escalado fraccional, donde XWayland se ve borroso.
@@ -63,15 +64,23 @@ fn demo_request(arguments: &[String]) -> Option<(DemoKind, PathBuf)> {
     })
 }
 
-fn main() -> eframe::Result {
+#[cfg(target_os = "linux")]
+fn linux_event_loop() -> Option<eframe::EventLoopBuilderHook> {
+    use winit::platform::x11::EventLoopBuilderExtX11;
+
     let backend = std::env::var("PUENTE_BACKEND").ok();
     let x11 = use_x11(backend.as_deref(), std::env::var_os("DISPLAY").is_some());
+    x11.then(|| -> eframe::EventLoopBuilderHook {
+        Box::new(|builder| {
+            builder.with_x11();
+        })
+    })
+}
+
+fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
-        event_loop_builder: x11.then(|| -> EventLoopBuilderHook {
-            Box::new(|builder| {
-                builder.with_x11();
-            })
-        }),
+        #[cfg(target_os = "linux")]
+        event_loop_builder: linux_event_loop(),
         viewport: egui::ViewportBuilder::default()
             .with_app_id("puente")
             .with_inner_size([1100.0, 860.0]),
@@ -114,6 +123,7 @@ fn main() -> eframe::Result {
 mod tests {
     use super::*;
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn xwayland_is_used_unless_asked_not_to_or_missing() {
         assert!(use_x11(None, true));
