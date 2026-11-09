@@ -4,7 +4,7 @@ use android_activity::AndroidApp;
 use jni::objects::{GlobalRef, JByteArray, JByteBuffer, JObject, JString};
 use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jint, jlong, jstring};
 use jni::{JNIEnv, JavaVM};
-use puente_core::wire::{MediaInfo, NotificationInfo, VideoPacket};
+use puente_core::wire::{CallInfo, MediaInfo, NotificationInfo, VideoPacket};
 use puente_ui::PhoneActions;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
@@ -219,12 +219,14 @@ pub extern "system" fn Java_dev_puente_app_Native_onNotification(
     app: JString,
     title: JString,
     body: JString,
+    can_reply: jboolean,
 ) {
     let info = NotificationInfo {
         key: text(&mut env, &key),
         app: text(&mut env, &app),
         title: text(&mut env, &title),
         text: text(&mut env, &body),
+        can_reply: can_reply != JNI_FALSE,
     };
     if let Some(engine) = running_engine() {
         engine.post_notification(info);
@@ -383,4 +385,47 @@ pub extern "system" fn Java_dev_puente_app_Native_isLinked(_env: JNIEnv, _this: 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_dev_puente_app_Native_log(mut env: JNIEnv, _this: JObject, value: JString) {
     report(text(&mut env, &value));
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_puente_app_Native_onCall(
+    mut env: JNIEnv,
+    _this: JObject,
+    key: JString,
+    app: JString,
+    caller: JString,
+    can_answer: jboolean,
+    can_decline: jboolean,
+) {
+    let call = CallInfo {
+        key: text(&mut env, &key),
+        app: text(&mut env, &app),
+        caller: text(&mut env, &caller),
+        can_answer: can_answer != JNI_FALSE,
+        can_decline: can_decline != JNI_FALSE,
+    };
+    if let Some(engine) = running_engine() {
+        engine.report_call(call);
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_puente_app_Native_onCallEnded(mut env: JNIEnv, _this: JObject, key: JString) {
+    let key = text(&mut env, &key);
+    if let Some(engine) = running_engine() {
+        engine.end_call(key);
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_puente_app_Native_onReplyResult(
+    mut env: JNIEnv,
+    _this: JObject,
+    key: JString,
+    delivered: jboolean,
+) {
+    let key = text(&mut env, &key);
+    if let Some(engine) = running_engine() {
+        engine.report_reply(key, delivered != JNI_FALSE);
+    }
 }

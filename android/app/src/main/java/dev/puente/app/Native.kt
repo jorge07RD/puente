@@ -36,7 +36,13 @@ object Native {
 
     external fun onNotificationAccess(enabled: Boolean)
 
-    external fun onNotification(key: String, app: String, title: String, body: String)
+    external fun onNotification(key: String, app: String, title: String, body: String, canReply: Boolean)
+
+    external fun onCall(key: String, app: String, caller: String, canAnswer: Boolean, canDecline: Boolean)
+
+    external fun onCallEnded(key: String)
+
+    external fun onReplyResult(key: String, delivered: Boolean)
 
     external fun onNotificationRemoved(key: String)
 

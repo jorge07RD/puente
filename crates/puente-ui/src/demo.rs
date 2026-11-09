@@ -9,7 +9,7 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 
 use eframe::egui::{self, Color32, ColorImage, ScreenshotCallback, TextureOptions, ViewportCommand};
-use puente_core::wire::{MediaInfo, NotificationInfo};
+use puente_core::wire::{CallInfo, MediaInfo, NotificationInfo};
 use puente_core::{Config, Engine, Role, Status, View};
 
 use crate::desktop::{self, DesktopState};
@@ -161,7 +161,7 @@ impl Demo {
         })
     }
 
-    fn sample_view(&self, scene: Scene) -> View {
+    fn sample_view(&self, scene: Scene, time: f32) -> View {
         let mut view = self.engine.view();
         let streaming = scene == Scene::Streaming;
         let peer = match self.kind {
@@ -191,8 +191,18 @@ impl Demo {
             artist: "Artista de ejemplo".to_string(),
             playing: true,
         });
+        view.call = (7.8..9.4).contains(&time).then(|| CallInfo {
+            key: "llamada".to_string(),
+            app: "Teléfono".to_string(),
+            caller: "Ana".to_string(),
+            can_answer: true,
+            can_decline: true,
+        });
         view.notifications = vec![
-            sample_notice("1", "Mensajes", "Ana", "¿Llegas a tiempo a la cena?"),
+            NotificationInfo {
+                can_reply: true,
+                ..sample_notice("1", "Mensajes", "Ana", "¿Llegas a tiempo a la cena?")
+            },
             sample_notice("2", "Correo", "Factura de noviembre", "Ya está disponible tu factura."),
             sample_notice("3", "Calendario", "Reunión de equipo", "Empieza en 15 minutos."),
         ];
@@ -230,6 +240,7 @@ fn sample_notice(key: &str, app: &str, title: &str, text: &str) -> NotificationI
         app: app.to_string(),
         title: title.to_string(),
         text: text.to_string(),
+        can_reply: false,
     }
 }
 
@@ -319,7 +330,7 @@ impl eframe::App for Demo {
 
         let scene = self.kind.scene(time);
         self.update_samples(time, scene);
-        let view = self.sample_view(scene);
+        let view = self.sample_view(scene, time);
 
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(GROUND))

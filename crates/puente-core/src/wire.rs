@@ -73,6 +73,11 @@ pub enum Message {
         id: u32,
     },
     Command(PhoneCommand),
+    Call(CallInfo),
+    CallEnded {
+        key: String,
+    },
+    ReplyResult(ReplyOutcome),
     /// El otro lado deshizo el emparejamiento.
     Unpair,
     /// Registro del móvil, que sin ADB no se podría leer desde la PC.
@@ -87,6 +92,26 @@ pub struct NotificationInfo {
     pub app: String,
     pub title: String,
     pub text: String,
+    /// La app que la envió admite respuesta directa.
+    #[serde(default)]
+    pub can_reply: bool,
+}
+
+/// Una llamada entrante, de teléfono o de cualquier app.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CallInfo {
+    pub key: String,
+    pub app: String,
+    pub caller: String,
+    pub can_answer: bool,
+    pub can_decline: bool,
+}
+
+/// Resultado de responder a una notificación.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ReplyOutcome {
+    pub key: String,
+    pub delivered: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -112,6 +137,8 @@ pub enum PhoneCommand {
     Ring { on: bool },
     Media { action: MediaAction },
     StopMirror,
+    Reply { key: String, text: String },
+    CallAction { key: String, answer: bool },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]

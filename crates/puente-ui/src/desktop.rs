@@ -6,7 +6,9 @@ use eframe::egui::{
     self, Align, CursorIcon, Event, Key, Layout, Pos2, Rect, RichText, Sense, Stroke, StrokeKind,
     TextureHandle, UiBuilder, Vec2, pos2, vec2,
 };
-use puente_core::wire::{Input, KeyPress, MediaAction, NavAction, NotificationInfo, PhoneCommand, TouchPhase};
+use puente_core::wire::{
+    CallInfo, Input, KeyPress, MediaAction, NavAction, NotificationInfo, PhoneCommand, TouchPhase,
+};
 use puente_core::{Engine, Status, View};
 
 use crate::{DesktopActions, RecentFile};
@@ -47,6 +49,12 @@ const SILENCE_LEVEL: f32 = 0.02;
 const NAVIGATION_WIDTH: f32 = 3.0 * 44.0 + 2.0 * 28.0;
 const TRANSFER_REFRESH: std::time::Duration = std::time::Duration::from_millis(100);
 
+struct ReplyDraft {
+    key: String,
+    text: String,
+    needs_focus: bool,
+}
+
 #[derive(Default)]
 pub struct DesktopState {
     touching: bool,
@@ -56,6 +64,8 @@ pub struct DesktopState {
     show_cards: bool,
     /// Solo la transmisión, sin tarjetas.
     focus: bool,
+    /// La respuesta que se está escribiendo.
+    reply: Option<ReplyDraft>,
     /// Hasta cuándo vale el segundo toque para desvincular.
     unpair_until: Option<f32>,
     link: LinkMotion,
@@ -232,6 +242,8 @@ struct Frame<'a> {
     bridge: BridgeState,
     hovering_files: bool,
     recent_files: Vec<RecentFile>,
+    /// El aviso de llamada, que tapa lo que haya debajo.
+    call_rect: Option<Rect>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -268,6 +280,7 @@ pub fn draw(
         bridge,
         hovering_files,
         recent_files,
+        call_rect: None,
     };
     let area = ui.max_rect().shrink(OUTER);
     match &view.status {
@@ -393,6 +406,11 @@ fn draw_connected(
     name: &str,
 ) {
     send_dropped_files(ui, frame);
+    let frame = &Frame {
+        call_rect: frame.view.call.as_ref().map(|_| call_banner_rect(area)),
+        recent_files: frame.recent_files.clone(),
+        ..*frame
+    };
     if let Some(ends) = state.ring_ends
         && frame.time >= ends
     {
@@ -453,6 +471,60 @@ fn draw_connected(
     if frame.hovering_files && !cards_visible {
         draw_drop_overlay(ui, area);
     }
+    if let (Some(call), Some(rect)) = (&frame.view.call, frame.call_rect) {
+        draw_call_banner(ui, rect, frame.engine, call);
+    }
+}
+
+fn call_banner_rect(area: Rect) -> Rect {
+    const WIDTH: f32 = 560.0;
+    const HEIGHT: f32 = 72.0;
+    const TOP: f32 = 6.0;
+
+    let width = WIDTH.min(area.width() - TOP * 2.0);
+    Rect::from_min_size(
+        pos2(area.center().x - width / 2.0, area.top() + TOP),
+        vec2(width, HEIGHT),
+    )
+}
+
+/// Una llamada no puede esperar: el aviso va encima de todo, también sin tarjetas.
+fn draw_call_banner(ui: &mut egui::Ui, rect: Rect, engine: &Engine, call: &CallInfo) {
+    const BUTTON_HEIGHT: f32 = 40.0;
+
+    // Sin esto, un clic en el aviso llegaría a los botones que tiene debajo.
+    ui.allocate_rect(rect, Sense::click());
+    ui.painter().rect(
+        rect,
+        crate::theme::CARD_RADIUS,
+        crate::theme::CARD,
+        Stroke::new(1.5, ACCENT),
+        StrokeKind::Inside,
+    );
+
+    let builder = UiBuilder::new()
+        .max_rect(rect.shrink2(vec2(PADDING, 8.0)))
+        .layout(Layout::right_to_left(Align::Center));
+    ui.scope_builder(builder, |ui| {
+        let send = |answer| {
+            engine.send_command(PhoneCommand::CallAction {
+                key: call.key.clone(),
+                answer,
+            });
+        };
+        if call.can_decline && pill(ui, "Rechazar", BUTTON_HEIGHT, true).clicked() {
+            send(false);
+        }
+        if call.can_answer && pill(ui, "Contestar", BUTTON_HEIGHT, false).clicked() {
+            send(true);
+        }
+        ui.with_layout(Layout::top_down(Align::Min), |ui| {
+            ui.spacing_mut().item_spacing.y = 2.0;
+            label(ui, &format!("Llamada · {}", displayable(ui, &call.app)));
+            let caller = displayable(ui, &call.caller);
+            ui.add(egui::Label::new(RichText::new(caller).size(16.0).color(INK)).truncate());
+        });
+    });
 }
 
 fn draw_card(ui: &mut egui::Ui, index: usize, rect: Rect, frame: &Frame, state: &mut DesktopState, name: &str) {
@@ -465,7 +537,7 @@ fn draw_card(ui: &mut egui::Ui, index: usize, rect: Rect, frame: &Frame, state: 
         2 => audio_card(ui, rect, frame),
         3 => ring_card(ui, rect, frame, state),
         4 => music_card(ui, rect, frame),
-        5 => notices_card(ui, rect, frame),
+        5 => notices_card(ui, rect, frame, state),
         6 => files_card(ui, rect, frame),
         _ => settings_card(ui, rect, frame),
     }
@@ -571,7 +643,7 @@ fn draw_center(
         .inner;
 
     if let Some(screen) = screen.filter(|_| frame.view.input_enabled) {
-        forward_input(ui, screen, frame.engine, touching);
+        forward_input(ui, screen, frame, touching);
     }
     toggled
 }
@@ -820,8 +892,16 @@ fn music_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
     });
 }
 
-fn notices_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
+fn notices_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame, state: &mut DesktopState) {
     let notices = &frame.view.notifications;
+    if state
+        .reply
+        .as_ref()
+        .is_some_and(|draft| !notices.iter().any(|info| info.key == draft.key))
+    {
+        state.reply = None;
+    }
+
     let count = if notices.is_empty() { String::new() } else { notices.len().to_string() };
 
     card_full(ui, rect, "06", "Avisos", !notices.is_empty(), &count, |ui| {
@@ -834,14 +914,52 @@ fn notices_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
             .auto_shrink([false; 2])
             .show(ui, |ui| {
                 for info in notices {
-                    draw_notice(ui, frame.engine, info);
+                    draw_notice(ui, frame, info, &mut state.reply);
                     ui.add_space(4.0);
                 }
             });
     });
 }
 
-fn draw_notice(ui: &mut egui::Ui, engine: &Engine, info: &NotificationInfo) {
+fn draw_reply_editor(ui: &mut egui::Ui, engine: &Engine, key: &str, slot: &mut Option<ReplyDraft>) {
+    const BUTTON_HEIGHT: f32 = 28.0;
+
+    let Some(draft) = slot.as_mut() else {
+        return;
+    };
+    let response = ui.add(
+        egui::TextEdit::singleline(&mut draft.text)
+            .hint_text("Escribe tu respuesta")
+            .desired_width(ui.available_width()),
+    );
+    if draft.needs_focus {
+        response.request_focus();
+        draft.needs_focus = false;
+    }
+    let pressed_enter = response.lost_focus() && ui.input(|input| input.key_pressed(Key::Enter));
+    let pressed_escape = ui.input(|input| input.key_pressed(Key::Escape));
+
+    let (send, cancel) = ui
+        .horizontal(|ui| {
+            let send = pill(ui, "Enviar", BUTTON_HEIGHT, true).clicked();
+            let cancel = pill(ui, "Cancelar", BUTTON_HEIGHT, false).clicked();
+            (send, cancel)
+        })
+        .inner;
+
+    if (send || pressed_enter) && !draft.text.trim().is_empty() {
+        engine.send_command(PhoneCommand::Reply {
+            key: key.to_string(),
+            text: draft.text.trim().to_string(),
+        });
+        *slot = None;
+    } else if cancel || pressed_escape {
+        *slot = None;
+    }
+}
+
+fn draw_notice(ui: &mut egui::Ui, frame: &Frame, info: &NotificationInfo, reply: &mut Option<ReplyDraft>) {
+    let engine = frame.engine;
     const CLOSE_SIZE: f32 = 28.0;
     const BODY_CHARACTERS: usize = 110;
 
@@ -860,6 +978,22 @@ fn draw_notice(ui: &mut egui::Ui, engine: &Engine, info: &NotificationInfo) {
             let body: String = displayable(ui, &info.text).chars().take(BODY_CHARACTERS).collect();
             if !body.is_empty() {
                 ui.label(RichText::new(body).color(INK_SOFT));
+            }
+
+            if info.can_reply {
+                ui.add_space(4.0);
+                if reply.as_ref().is_some_and(|draft| draft.key == info.key) {
+                    draw_reply_editor(ui, engine, &info.key, reply);
+                } else if pill(ui, "Responder", 26.0, false).clicked() {
+                    *reply = Some(ReplyDraft {
+                        key: info.key.clone(),
+                        text: String::new(),
+                        needs_focus: true,
+                    });
+                }
+            }
+            if let Some(outcome) = frame.view.last_reply.as_ref().filter(|outcome| outcome.key == info.key) {
+                label(ui, if outcome.delivered { "Respuesta enviada" } else { "No se pudo enviar" });
             }
         });
         if icon_button(ui, Icon::Close, CLOSE_SIZE, false).on_hover_text("Descartar").clicked() {
@@ -1047,8 +1181,12 @@ fn wheel_lines(unit: egui::MouseWheelUnit, delta: f32) -> f32 {
     }
 }
 
-fn forward_input(ui: &egui::Ui, screen: Rect, engine: &Engine, touching: &mut bool) {
+fn forward_input(ui: &egui::Ui, screen: Rect, frame: &Frame, touching: &mut bool) {
+    let engine = frame.engine;
     let (events, hover) = ui.input(|input| (input.events.clone(), input.pointer.hover_pos()));
+    // Lo que se teclea en una respuesta no debe acabar también en el móvil.
+    let typing_here = ui.ctx().egui_wants_keyboard_input();
+    let covered = |position: Pos2| frame.call_rect.is_some_and(|rect| rect.contains(position));
     let touch = |phase, position| {
         let (x, y) = normalized(screen, position);
         engine.send_input(Input::Touch { phase, x, y });
@@ -1062,7 +1200,7 @@ fn forward_input(ui: &egui::Ui, screen: Rect, engine: &Engine, touching: &mut bo
                 pressed,
                 ..
             } => {
-                if pressed && screen.contains(pos) {
+                if pressed && screen.contains(pos) && !covered(pos) {
                     *touching = true;
                     touch(TouchPhase::Down, pos);
                 } else if !pressed && *touching {
@@ -1078,12 +1216,12 @@ fn forward_input(ui: &egui::Ui, screen: Rect, engine: &Engine, touching: &mut bo
                     engine.send_input(Input::Scroll { x, y, lines });
                 }
             }
-            Event::Text(text) | Event::Paste(text) => engine.send_input(Input::Text { text }),
+            Event::Text(text) | Event::Paste(text) if !typing_here => engine.send_input(Input::Text { text }),
             Event::Key {
                 key,
                 pressed: true,
                 ..
-            } => {
+            } if !typing_here => {
                 let key = match key {
                     Key::Backspace => KeyPress::Backspace,
                     Key::Enter => KeyPress::Enter,
