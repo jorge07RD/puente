@@ -2,13 +2,17 @@
 
 mod audio;
 mod decoder;
+#[cfg(unix)]
+mod handoff;
 mod integration;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use eframe::egui;
+use puente_core::settings::SettingsFile;
 use puente_core::{Config, Engine, Role};
+use puente_ui::i18n::{self, t};
 use puente_ui::{Demo, DemoKind, Gallery, PuenteApp};
 
 fn data_dir() -> PathBuf {
@@ -77,7 +81,47 @@ fn linux_event_loop() -> Option<eframe::EventLoopBuilderHook> {
     })
 }
 
+/// `puente --send <archivos>`: los entrega a la ventana abierta y termina.
+fn send_and_exit(paths: &[String]) -> ! {
+    if paths.is_empty() {
+        eprintln!("{}", t().send_usage);
+        std::process::exit(2);
+    }
+    #[cfg(unix)]
+    let result = handoff::send(paths);
+    #[cfg(not(unix))]
+    let result: Result<(), String> = Err(t().linux_only.to_string());
+    match result {
+        Ok(()) => {
+            println!("{}", (t().sending_files)(paths.len()));
+            std::process::exit(0);
+        }
+        Err(error) => {
+            eprintln!("{}", (t().send_error)(&error));
+            std::process::exit(1);
+        }
+    }
+}
+
+/// El idioma del sistema, salvo que `--lang <código>` diga otro. La elección guardada
+/// en Ajustes manda sobre los dos.
+fn set_up_language(arguments: &[String]) {
+    let forced = arguments
+        .windows(2)
+        .find(|pair| pair[0] == "--lang")
+        .map(|pair| pair[1].clone());
+    let system = forced.or_else(sys_locale::get_locale).unwrap_or_default();
+    i18n::set_system_language(&system);
+    let settings = SettingsFile::load(data_dir().join("settings.json"));
+    i18n::apply(settings.current.language);
+}
+
 fn main() -> eframe::Result {
+    let arguments: Vec<String> = std::env::args().collect();
+    set_up_language(&arguments);
+    if let Some(at) = arguments.iter().position(|argument| argument == "--send") {
+        send_and_exit(&arguments[at + 1..]);
+    }
     let options = eframe::NativeOptions {
         #[cfg(target_os = "linux")]
         event_loop_builder: linux_event_loop(),
@@ -86,7 +130,6 @@ fn main() -> eframe::Result {
             .with_inner_size([1100.0, 860.0]),
         ..Default::default()
     };
-    let arguments: Vec<String> = std::env::args().collect();
     if let Some((kind, output)) = demo_request(&arguments) {
         let size = match kind {
             DemoKind::Desktop => [1280.0, 780.0],

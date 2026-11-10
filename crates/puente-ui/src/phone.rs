@@ -8,7 +8,8 @@ use crate::desktop::spaced_code;
 use crate::dots::{self, BridgeState, MIN_TEXT_PITCH};
 use crate::icons::Icon;
 use crate::motion::{self, LinkMotion};
-use crate::parts::{card, dot_figure, icon_button, label, pill, stat, switch_row};
+use crate::i18n::{self, t};
+use crate::parts::{card, dot_figure, icon_button, label, pill, stat, switch_row, value_row};
 use crate::theme::{ACCENT, GAP, INK, INK_SOFT};
 
 const MARGIN: f32 = 14.0;
@@ -87,14 +88,14 @@ pub fn draw(
             ui.add_space(4.0);
 
             if let Some(error) = &view.last_error {
-                ui.colored_label(ACCENT, error);
+                ui.colored_label(ACCENT, i18n::problem(error));
             }
             match &view.status {
                 Status::Searching => draw_searching(ui, engine, view, bridge),
                 Status::Connecting { name } => {
-                    card(ui, "01", "Enlace", true, |ui| {
+                    card(ui, "01", t().card_link, true, |ui| {
                         draw_bridge(ui, bridge);
-                        label(ui, &format!("Conectando con {name}"));
+                        label(ui, &(t().connecting_to)(name));
                     });
                 }
                 Status::Pairing {
@@ -109,20 +110,20 @@ pub fn draw(
 }
 
 fn draw_searching(ui: &mut egui::Ui, engine: &Engine, view: &View, bridge: BridgeState) {
-    card(ui, "01", "Enlace", true, |ui| {
+    card(ui, "01", t().card_link, true, |ui| {
         draw_bridge(ui, bridge);
-        label(ui, "Buscando tu PC en la Wi-Fi");
+        label(ui, t().searching_pc);
     });
 
     let unpaired: Vec<&Found> = view.found.iter().filter(|found| !found.paired).collect();
     let middle_card = !unpaired.is_empty() || view.paired.is_empty();
     if !unpaired.is_empty() {
-        card(ui, "02", "PCs encontradas", false, |ui| {
+        card(ui, "02", t().card_found, false, |ui| {
             for found in unpaired {
                 ui.horizontal(|ui| {
                     ui.add(egui::Label::new(&found.name).truncate());
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if pill(ui, "Emparejar", TOUCH, true).clicked() {
+                        if pill(ui, t().pair, TOUCH, true).clicked() {
                             engine.connect(found.fingerprint);
                         }
                     });
@@ -130,19 +131,19 @@ fn draw_searching(ui: &mut egui::Ui, engine: &Engine, view: &View, bridge: Bridg
             }
         });
     } else if view.paired.is_empty() {
-        card(ui, "02", "Primeros pasos", false, |ui| {
-            ui.label("Abre Puente en tu PC, con este móvil en la misma Wi-Fi. Aparecerá aquí.");
+        card(ui, "02", t().card_first_steps, false, |ui| {
+            ui.label(t().first_steps_text);
         });
     }
 
     if !view.paired.is_empty() {
         let index = if middle_card { "03" } else { "02" };
-        card(ui, index, "Emparejadas", false, |ui| {
+        card(ui, index, t().card_paired, false, |ui| {
             for peer in &view.paired {
                 ui.horizontal(|ui| {
                     ui.add(egui::Label::new(&peer.name).truncate());
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if pill(ui, "Olvidar", TOUCH, false).clicked() {
+                        if pill(ui, t().forget, TOUCH, false).clicked() {
                             let _ = engine.forget(peer.fingerprint);
                         }
                     });
@@ -153,7 +154,7 @@ fn draw_searching(ui: &mut egui::Ui, engine: &Engine, view: &View, bridge: Bridg
 }
 
 fn draw_pairing(ui: &mut egui::Ui, engine: &Engine, name: &str, code: &str, answered: bool, bridge: BridgeState) {
-    card(ui, "01", "Emparejar", false, |ui| {
+    card(ui, "01", t().card_pair, false, |ui| {
         label(ui, name);
         ui.add_space(6.0);
 
@@ -165,17 +166,17 @@ fn draw_pairing(ui: &mut egui::Ui, engine: &Engine, name: &str, code: &str, answ
 
         if answered {
             draw_bridge(ui, bridge);
-            label(ui, "Esperando al otro dispositivo");
+            label(ui, t().waiting_other);
             return;
         }
 
-        ui.label("Acepta solo si este código es igual en los dos dispositivos.");
+        ui.label(t().accept_if_same);
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            if pill(ui, "Coinciden", TOUCH, true).clicked() {
+            if pill(ui, t().codes_match, TOUCH, true).clicked() {
                 engine.answer_pairing(true);
             }
-            if pill(ui, "Cancelar", TOUCH, false).clicked() {
+            if pill(ui, t().cancel, TOUCH, false).clicked() {
                 engine.answer_pairing(false);
             }
         });
@@ -191,7 +192,7 @@ fn draw_connected(
     name: &str,
     bridge: BridgeState,
 ) {
-    card(ui, "01", "Enlace", true, |ui| {
+    card(ui, "01", t().card_link, true, |ui| {
         draw_bridge(ui, bridge);
         ui.add(egui::Label::new(RichText::new(name).color(INK_SOFT)).truncate());
         let round_trip = view
@@ -209,7 +210,7 @@ fn draw_connected(
         return;
     };
 
-    card(ui, "02", "Pantalla", view.mirroring, |ui| {
+    card(ui, "02", t().card_screen, view.mirroring, |ui| {
         ui.vertical_centered(|ui| {
             ui.add_space(4.0);
             if view.mirroring {
@@ -217,45 +218,45 @@ fn draw_connected(
                     phone.stop_capture();
                 }
                 ui.add_space(4.0);
-                label(ui, "Compartiendo. Toca para detener");
-                ui.label(RichText::new("La pantalla no se apagará mientras la PC esté conectada.").color(INK_SOFT));
+                label(ui, t().sharing_tap_stop);
+                ui.label(RichText::new(t().screen_stays_on).color(INK_SOFT));
             } else {
                 if icon_button(ui, Icon::Play, 96.0, true).clicked() {
                     phone.start_capture();
                 }
                 ui.add_space(4.0);
-                label(ui, "Compartir pantalla");
-                ui.label(RichText::new("Android te pedirá confirmarlo cada vez.").color(INK_SOFT));
+                label(ui, t().share_screen);
+                ui.label(RichText::new(t().android_asks).color(INK_SOFT));
             }
         });
     });
 
-    card(ui, "03", "Permisos", false, |ui| {
-        permission_row(ui, "Control desde la PC", view.input_enabled, || {
+    card(ui, "03", t().card_permissions, false, |ui| {
+        permission_row(ui, t().control_from_pc, view.input_enabled, || {
             phone.open_accessibility_settings();
         });
-        permission_row(ui, "Avisos en la PC", view.notifications_enabled, || {
+        permission_row(ui, t().notices_on_pc, view.notifications_enabled, || {
             phone.open_notification_settings();
         });
-        permission_row(ui, "Seguir en segundo plano", phone.battery_unrestricted(), || {
+        permission_row(ui, t().keep_running, phone.battery_unrestricted(), || {
             phone.open_battery_settings();
         });
         if !view.input_enabled || !view.notifications_enabled {
             ui.add_space(4.0);
             ui.label(
-                RichText::new(
-                    "Si Android lo bloquea: Ajustes, Aplicaciones, Puente, menú de arriba, \
-                     Permitir ajustes restringidos.",
-                )
-                .color(INK_SOFT),
+                RichText::new(t().restricted_help).color(INK_SOFT),
             );
         }
     });
 
-    card(ui, "04", "Ajustes", false, |ui| {
+    card(ui, "04", t().card_settings, false, |ui| {
         let animations = view.animations;
-        if switch_row(ui, "Animaciones", animations, TOUCH).clicked() {
+        if switch_row(ui, t().animations, animations, TOUCH).clicked() {
             engine.set_animations(!animations);
+        }
+        let language = view.language;
+        if value_row(ui, t().language, &i18n::choice_label(language), TOUCH).clicked() {
+            engine.set_language(language.next());
         }
     });
 }
@@ -266,11 +267,11 @@ fn unpair_control(ui: &mut egui::Ui, engine: &Engine, state: &mut PhoneState) {
 
     let confirming = state.unpair_until.is_some_and(|until| state.now < until);
     if confirming {
-        if pill(ui, "¿Seguro?", TOUCH, true).clicked() {
+        if pill(ui, t().sure, TOUCH, true).clicked() {
             state.unpair_until = None;
             let _ = engine.unpair();
         }
-    } else if pill(ui, "Desvincular", TOUCH, false).clicked() {
+    } else if pill(ui, t().unpair, TOUCH, false).clicked() {
         state.unpair_until = Some(state.now + CONFIRM_SECONDS);
     }
 }
@@ -281,8 +282,8 @@ fn permission_row(ui: &mut egui::Ui, title: &str, enabled: bool, open: impl FnOn
         ui.add(egui::Label::new(title).truncate());
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if enabled {
-                label(ui, "Activo");
-            } else if pill(ui, "Activar", TOUCH, true).clicked() {
+                label(ui, t().active);
+            } else if pill(ui, t().enable, TOUCH, true).clicked() {
                 open();
             }
         });

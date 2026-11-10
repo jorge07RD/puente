@@ -182,6 +182,25 @@ pub extern "system" fn Java_dev_puente_app_Native_ensureEngine(
 }
 
 #[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_puente_app_Native_setSystemLanguage(mut env: JNIEnv, _this: JObject, tag: JString) {
+    puente_ui::i18n::set_system_language(&text(&mut env, &tag));
+    if let Some(engine) = running_engine() {
+        puente_ui::i18n::apply(engine.view().language);
+    }
+}
+
+/// Los textos de Kotlin siguen la misma elección que la interfaz en Rust.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_puente_app_Native_language(env: JNIEnv, _this: JObject) -> jstring {
+    let language = match running_engine() {
+        Some(engine) => puente_ui::i18n::resolve(engine.view().language),
+        None => puente_ui::i18n::system_language(),
+    };
+    env.new_string(language.code())
+        .map_or(std::ptr::null_mut(), |code| code.into_raw())
+}
+
+#[unsafe(no_mangle)]
 pub extern "system" fn Java_dev_puente_app_Native_waitTask(
     env: JNIEnv,
     _this: JObject,

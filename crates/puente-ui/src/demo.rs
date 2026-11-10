@@ -64,6 +64,65 @@ impl DemoKind {
     }
 }
 
+/// Los datos de ejemplo, en el idioma de la interfaz.
+struct Samples {
+    phone: &'static str,
+    pc: &'static str,
+    song: &'static str,
+    artist: &'static str,
+    phone_app: &'static str,
+    caller: &'static str,
+    notices: [(&'static str, &'static str, &'static str); 3],
+    files: [&'static str; 2],
+}
+
+fn samples() -> Samples {
+    match crate::i18n::language() {
+        crate::i18n::Language::Spanish => Samples {
+            phone: "Pixel de ejemplo",
+            pc: "Mi PC",
+            song: "Canción de ejemplo",
+            artist: "Artista de ejemplo",
+            phone_app: "Teléfono",
+            caller: "Ana",
+            notices: [
+                ("Mensajes", "Ana", "¿Llegas a tiempo a la cena?"),
+                ("Correo", "Factura de noviembre", "Ya está disponible tu factura."),
+                ("Calendario", "Reunión de equipo", "Empieza en 15 minutos."),
+            ],
+            files: ["foto-de-ejemplo.jpg", "documento.pdf"],
+        },
+        crate::i18n::Language::English => Samples {
+            phone: "Sample Pixel",
+            pc: "My PC",
+            song: "Sample song",
+            artist: "Sample artist",
+            phone_app: "Phone",
+            caller: "Anna",
+            notices: [
+                ("Messages", "Anna", "Will you make it to dinner on time?"),
+                ("Mail", "November invoice", "Your invoice is ready."),
+                ("Calendar", "Team meeting", "Starts in 15 minutes."),
+            ],
+            files: ["sample-photo.jpg", "document.pdf"],
+        },
+        crate::i18n::Language::Portuguese => Samples {
+            phone: "Pixel de exemplo",
+            pc: "Meu PC",
+            song: "Música de exemplo",
+            artist: "Artista de exemplo",
+            phone_app: "Telefone",
+            caller: "Ana",
+            notices: [
+                ("Mensagens", "Ana", "Você chega a tempo para o jantar?"),
+                ("E-mail", "Fatura de novembro", "Sua fatura já está disponível."),
+                ("Agenda", "Reunião da equipe", "Começa em 15 minutos."),
+            ],
+            files: ["foto-de-exemplo.jpg", "documento.pdf"],
+        },
+    }
+}
+
 #[derive(Default)]
 struct SampleDesktop {
     levels: Mutex<Vec<f32>>,
@@ -140,7 +199,7 @@ impl Demo {
         fs::create_dir_all(&output).map_err(|error| error.to_string())?;
 
         let data_dir = std::env::temp_dir().join(format!("puente-demo-{}", std::process::id()));
-        let mut config = Config::new(Role::Desktop, data_dir, "Mi PC".to_string());
+        let mut config = Config::new(Role::Desktop, data_dir, samples().pc.to_string());
         config.port = 0;
         let engine = Engine::start(config, || {}).map_err(|error| error.to_string())?;
 
@@ -163,10 +222,11 @@ impl Demo {
 
     fn sample_view(&self, scene: Scene, time: f32) -> View {
         let mut view = self.engine.view();
+        let sample = samples();
         let streaming = scene == Scene::Streaming;
         let peer = match self.kind {
-            DemoKind::Desktop => "Pixel de ejemplo",
-            DemoKind::Phone => "Mi PC",
+            DemoKind::Desktop => sample.phone,
+            DemoKind::Phone => sample.pc,
         };
         view.status = match scene {
             Scene::Searching => Status::Searching,
@@ -187,25 +247,26 @@ impl Demo {
         view.video_fps = streaming.then_some(58);
         view.video_mbps = streaming.then_some(7.4);
         view.media = Some(MediaInfo {
-            title: "Canción de ejemplo".to_string(),
-            artist: "Artista de ejemplo".to_string(),
+            title: sample.song.to_string(),
+            artist: sample.artist.to_string(),
             playing: true,
         });
         view.call = (7.8..9.4).contains(&time).then(|| CallInfo {
             key: "llamada".to_string(),
-            app: "Teléfono".to_string(),
-            caller: "Ana".to_string(),
+            app: sample.phone_app.to_string(),
+            caller: sample.caller.to_string(),
             can_answer: true,
             can_decline: true,
         });
-        view.notifications = vec![
-            NotificationInfo {
-                can_reply: true,
-                ..sample_notice("1", "Mensajes", "Ana", "¿Llegas a tiempo a la cena?")
-            },
-            sample_notice("2", "Correo", "Factura de noviembre", "Ya está disponible tu factura."),
-            sample_notice("3", "Calendario", "Reunión de equipo", "Empieza en 15 minutos."),
-        ];
+        view.notifications = sample
+            .notices
+            .iter()
+            .enumerate()
+            .map(|(index, (app, title, text))| NotificationInfo {
+                can_reply: index == 0,
+                ..sample_notice(&(index + 1).to_string(), app, title, text)
+            })
+            .collect();
         view
     }
 
@@ -223,10 +284,7 @@ impl Demo {
         *self.desktop.levels.lock().expect("muestra disponible") = levels;
 
         let recent = if (7.0..9.5).contains(&time) {
-            vec![
-                sample_sent("foto-de-ejemplo.jpg"),
-                sample_sent("documento.pdf"),
-            ]
+            samples().files.iter().map(|name| sample_sent(name)).collect()
         } else {
             Vec::new()
         };
@@ -328,6 +386,7 @@ impl eframe::App for Demo {
             return;
         }
 
+        crate::i18n::apply(self.engine.view().language);
         let scene = self.kind.scene(time);
         self.update_samples(time, scene);
         let view = self.sample_view(scene, time);

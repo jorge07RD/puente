@@ -211,6 +211,17 @@ pub fn switch_row(ui: &mut egui::Ui, text: &str, on: bool, height: f32) -> Respo
     response
 }
 
+/// Fila con un valor a la derecha que cambia al pulsarla.
+pub fn value_row(ui: &mut egui::Ui, text: &str, value: &str, height: f32) -> Response {
+    let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::click());
+    let font = FontId::new(TEXT_LABEL, medium());
+    ui.painter().text(rect.left_center(), Align2::LEFT_CENTER, text.to_uppercase(), font.clone(), INK_SOFT);
+    let color = if response.hovered() { ACCENT } else { INK };
+    ui.painter().text(rect.right_center(), Align2::RIGHT_CENTER, value.to_uppercase(), font, color);
+    paint_focus(ui, rect, 6.0, &response);
+    response
+}
+
 /// Botón redondo con icono. `primary` lo marca con el acento.
 pub fn icon_button(ui: &mut egui::Ui, icon: Icon, diameter: f32, primary: bool) -> Response {
     let (rect, response) = ui.allocate_exact_size(egui::Vec2::splat(diameter), Sense::click());

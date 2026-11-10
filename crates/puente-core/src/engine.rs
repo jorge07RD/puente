@@ -18,7 +18,7 @@ use tokio::time::{MissedTickBehavior, interval, timeout};
 use crate::pairing::{self, PairPrompt};
 use crate::tls::{Secure, TlsContext};
 use crate::session::Outgoing;
-use crate::settings::SettingsFile;
+use crate::settings::{LanguageChoice, SettingsFile};
 use crate::telemetry::RateMeter;
 use crate::transfers::Incoming;
 use crate::wire::{
@@ -83,12 +83,39 @@ pub struct Found {
     pub paired: bool,
 }
 
+/// Lo último que pasó con los archivos recibidos. La interfaz lo traduce.
+#[derive(Clone, Debug, PartialEq)]
+pub enum FileNote {
+    SendFailed,
+    ArrivedIncomplete,
+    Received(String),
+}
+
+/// Por qué se cortó el último intento. La interfaz lo traduce.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Problem {
+    PairingRejected,
+    TimedOut,
+    /// Con el detalle técnico, para quien quiera verlo.
+    Connection(String),
+}
+
+impl From<&crate::Error> for Problem {
+    fn from(error: &crate::Error) -> Self {
+        match error {
+            crate::Error::Rejected => Self::PairingRejected,
+            crate::Error::Timeout => Self::TimedOut,
+            other => Self::Connection(other.to_string()),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct View {
     pub status: Status,
     pub found: Vec<Found>,
     pub paired: Vec<Peer>,
-    pub last_error: Option<String>,
+    pub last_error: Option<Problem>,
     /// PC: está llegando vídeo. Móvil: la pantalla se está compartiendo.
     pub mirroring: bool,
     /// El permiso de Accesibilidad del móvil está activo.
@@ -98,7 +125,7 @@ pub struct View {
     pub notifications: Vec<NotificationInfo>,
     pub battery: Option<(u8, bool)>,
     pub media: Option<MediaInfo>,
-    pub last_file: Option<String>,
+    pub last_file: Option<FileNote>,
     /// Ida y vuelta de la conexión, medido con los pings.
     pub round_trip_ms: Option<u32>,
     /// PC: paquetes de vídeo por segundo que están llegando.
@@ -108,6 +135,9 @@ pub struct View {
     pub animations: bool,
     /// PC: el audio del móvil se reproduce aquí.
     pub audio_enabled: bool,
+    /// PC: mientras se transmite, el audio se oye solo aquí.
+    pub phone_muted: bool,
+    pub language: LanguageChoice,
     /// PC: llamada entrante en este momento.
     pub call: Option<CallInfo>,
     /// PC: resultado de la última respuesta enviada.
@@ -295,7 +325,7 @@ impl Shared {
                 if !state.incoming.fail(id) && self.role == Role::Desktop {
                     let _ = self.desktop_out.send(DesktopEvent::FileFailed(id));
                 }
-                self.update(|view| view.last_file = Some("Falló un envío de archivo".to_string()));
+                self.update(|view| view.last_file = Some(FileNote::SendFailed));
             }
             Message::FileSaved { id } => {
                 if self.role == Role::Desktop {
@@ -336,7 +366,7 @@ impl Shared {
             Ok(received) => received,
             Err(_) => {
                 self.send_control(Message::FileFailed { id });
-                self.update(|view| view.last_file = Some("Un archivo llegó incompleto".to_string()));
+                self.update(|view| view.last_file = Some(FileNote::ArrivedIncomplete));
                 return;
             }
         };
@@ -356,7 +386,7 @@ impl Shared {
                 let _ = self.task_out.try_send(task.to_string());
             }
         }
-        self.update(|view| view.last_file = Some(format!("Recibido: {}", received.name)));
+        self.update(|view| view.last_file = Some(FileNote::Received(received.name.clone())));
     }
 
     fn append_phone_log(&self, text: &str) {
@@ -483,6 +513,8 @@ impl Engine {
             video_mbps: None,
             animations: settings.current.animations,
             audio_enabled: settings.current.audio,
+            phone_muted: settings.current.phone_muted,
+            language: settings.current.language,
             call: None,
             last_reply: None,
         };
@@ -700,6 +732,30 @@ impl Engine {
             let _ = settings.save();
         }
         self.shared.update(|view| view.audio_enabled = enabled);
+        // Si la PC deja de sonar, el móvil no puede seguir callado.
+        if self.shared.view.lock().expect("vista disponible").phone_muted {
+            self.send_command(PhoneCommand::MutePhone { on: enabled });
+        }
+    }
+
+    pub fn set_phone_muted(&self, muted: bool) {
+        {
+            let mut settings = self.shared.settings.lock().expect("ajustes disponibles");
+            settings.current.phone_muted = muted;
+            let _ = settings.save();
+        }
+        self.shared.update(|view| view.phone_muted = muted);
+        let on = muted && self.audio_enabled();
+        self.send_command(PhoneCommand::MutePhone { on });
+    }
+
+    pub fn set_language(&self, language: LanguageChoice) {
+        {
+            let mut settings = self.shared.settings.lock().expect("ajustes disponibles");
+            settings.current.language = language;
+            let _ = settings.save();
+        }
+        self.shared.update(|view| view.language = language);
     }
 
     pub fn set_animations(&self, enabled: bool) {
@@ -1074,6 +1130,12 @@ async fn drive(shared: &Arc<Shared>, secure: Secure, address: SocketAddr) -> Res
             let _ = control.try_send(Message::Call(call.clone()));
         }
     }
+    if shared.role == Role::Desktop {
+        let view = shared.view.lock().expect("vista disponible");
+        if view.audio_enabled && view.phone_muted {
+            let _ = control.try_send(Message::Command(PhoneCommand::MutePhone { on: true }));
+        }
+    }
     *shared.session.lock().expect("sesión disponible") = Some(SessionHandle {
         peer,
         control,
@@ -1126,7 +1188,13 @@ async fn drive(shared: &Arc<Shared>, secure: Secure, address: SocketAddr) -> Res
             view.last_reply = None;
         }),
         // Un gesto a medias no puede quedarse "pulsando" si se corta la conexión.
-        Role::Phone => shared.deliver_input(&Input::Cancel),
+        Role::Phone => {
+            shared.deliver_input(&Input::Cancel);
+            // Sin la PC nadie oiría nada: el móvil recupera su sonido.
+            if let Ok(task) = serde_json::to_string(&PhoneCommand::MutePhone { on: false }) {
+                let _ = shared.task_out.try_send(task);
+            }
+        }
     }
     Ok(())
 }
@@ -1139,7 +1207,7 @@ fn finish(shared: &Shared, result: Result<()>) {
     shared.update(|view| {
         view.status = Status::Searching;
         if let Err(error) = result {
-            view.last_error = Some(error.to_string());
+            view.last_error = Some(Problem::from(&error));
         }
     });
 }

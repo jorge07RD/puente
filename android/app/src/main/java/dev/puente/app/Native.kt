@@ -9,6 +9,12 @@ object Native {
 
     external fun ensureEngine(dataDir: String)
 
+    /** Etiqueta del idioma del sistema, como `es-DO`. */
+    external fun setSystemLanguage(tag: String)
+
+    /** Código del idioma de la interfaz: `es`, `en` o `pt`. */
+    external fun language(): String
+
     /** Deja una línea en el registro que guarda la PC. */
     external fun log(text: String)
 

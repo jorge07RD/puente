@@ -52,6 +52,7 @@ fn start_engine(data_dir: PathBuf) -> Result<Arc<Engine>, String> {
         .map_err(|error| error.to_string())?;
     engine.set_input_enabled(INPUT_ENABLED.load(Ordering::SeqCst));
     engine.set_notifications_enabled(NOTIFICATIONS_ENABLED.load(Ordering::SeqCst));
+    puente_ui::i18n::apply(engine.view().language);
     Ok(engine)
 }
 
