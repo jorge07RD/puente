@@ -3,6 +3,7 @@
 mod demo;
 mod desktop;
 pub mod dots;
+pub mod i18n;
 mod gallery;
 pub mod icons;
 mod motion;
@@ -152,7 +153,7 @@ fn is_animating(view: &View) -> bool {
 fn draw_failure(ui: &mut egui::Ui, error: &str) {
     ui.vertical_centered(|ui| {
         ui.add_space(96.0);
-        ui.colored_label(ACCENT, "No se pudo iniciar Puente");
+        ui.colored_label(ACCENT, i18n::t().startup_failed);
         ui.add_space(8.0);
         label(ui, error);
     });
@@ -171,6 +172,7 @@ impl eframe::App for PuenteApp {
                 Err(error) => draw_failure(ui, error),
                 Ok(engine) => {
                     let view = engine.view();
+                    i18n::apply(view.language);
                     // Sin transmisión no debe quedar a la vista la última imagen recibida.
                     if !view.mirroring {
                         self.texture = None;

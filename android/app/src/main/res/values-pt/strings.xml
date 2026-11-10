@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="input_service_description">Permite controlar este celular com o mouse e o teclado do seu PC pareado enquanto você compartilha a tela com o Puente.</string>
+    <string name="share_label">Enviar ao PC</string>
+    <string name="notification_service_label">Puente: notificações no PC</string>
+    <string name="input_service_label">Puente: controle pelo PC</string>
+</resources>

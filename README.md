@@ -13,6 +13,8 @@ Míralo, contrólalo y recibe todo lo suyo. Sin cable, sin ADB y sin modo desarr
 ![Linux](https://img.shields.io/badge/Linux-escritorio-f2f2ef?style=flat-square&labelColor=141415)
 ![Android](https://img.shields.io/badge/Android-10%2B-f2f2ef?style=flat-square&labelColor=141415)
 
+**Español** · [English](README.en.md) · [Português](README.pt.md)
+
 <img src="assets/readme/demo.gif" alt="Puente buscando el móvil, emparejándose, y las tarjetas reacomodándose al empezar la transmisión" width="860">
 
 <sub>Capturas y GIF generados con datos de ejemplo.</sub>
@@ -55,7 +57,7 @@ En Linux, tener el móvil a mano suele exigir dos herramientas: **KDE Connect** 
 | | Función | Detalle |
 |---|---|---|
 | **Pantalla** | Ver y controlar el móvil | Ratón, rueda y teclado; atrás, inicio y recientes; se adapta al girar el móvil |
-| **Sonido** | Oír el móvil en la PC | Con interruptor para desactivarlo |
+| **Sonido** | Oír el móvil en la PC | Con interruptor para desactivarlo, y otro para silenciar el móvil mientras transmites |
 | **Avisos** | Notificaciones en el escritorio | Se pueden descartar y, si la app lo admite, responder desde la PC |
 | **Llamadas** | Ver quién llama | Aviso en la PC, también para llamadas de otras apps. Contestar desde la PC todavía no funciona en WhatsApp |
 | **Archivos** | Enviar en los dos sentidos | Arrastrando a la ventana, con progreso y confirmación de que se guardaron |
@@ -63,8 +65,15 @@ En Linux, tener el móvil a mano suele exigir dos herramientas: **KDE Connect** 
 | **Música** | Controlar lo que suena | Reproducir, pausar, anterior y siguiente |
 | **Batería** | Nivel y carga | Anillo de puntos animado mientras carga |
 | **Buscar** | Hacer sonar el móvil | Suena como alarma durante 30 segundos |
+| **Idiomas** | Español, inglés y portugués | Sigue el idioma del sistema o el que elijas en Ajustes |
 
 La pantalla del móvil se mantiene encendida mientras la compartes con una PC conectada, y puedes cortar la transmisión desde cualquiera de los dos lados. Con `F2` o el botón de la barra ocultas las tarjetas para dejar solo la transmisión.
+
+En Linux también puedes enviar archivos desde la terminal a la ventana abierta:
+
+```bash
+puente --send foto.jpg documento.pdf
+```
 
 ## Cómo funciona
 
@@ -178,7 +187,7 @@ Si encuentras un problema de seguridad, abre un issue sin incluir detalles explo
 ```text
 crates/
   puente-core/      protocolo, red, seguridad y transferencias
-  puente-ui/        pantallas compartidas y el lenguaje visual de puntos
+  puente-ui/        pantallas compartidas, traducciones y el lenguaje visual de puntos
   puente-desktop/   binario de Linux: vídeo, audio e integración con el escritorio
   puente-android/   puente JNI hacia Android
 android/            proyecto Gradle y la capa Kotlin

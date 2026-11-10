@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 
 use puente_core::wire::{CallInfo, NotificationInfo};
 use puente_core::{DesktopEvent, Engine};
+use puente_ui::i18n::t;
 use puente_ui::{DesktopActions, RecentFile, Transfer};
 
 use crate::audio::AudioMeter;
@@ -104,6 +105,8 @@ pub fn start(engine: Arc<Engine>, audio: AudioMeter) -> Integration {
         std::thread::spawn(move || run(engine, sync, events, sends));
     }
     let (outbox, pending) = channel::<PathBuf>();
+    #[cfg(unix)]
+    crate::handoff::listen(engine.clone(), outbox.clone());
     let transfer = Arc::new(Mutex::new(None));
     {
         let engine = engine.clone();
@@ -282,7 +285,7 @@ fn show_notification(info: &NotificationInfo) {
 fn show_call(call: &CallInfo) {
     let _ = notify_rust::Notification::new()
         .appname("Puente")
-        .summary(&format!("Llamada de {}", call.caller))
+        .summary(&(t().call_from)(&call.caller))
         .body(&escape_markup(&call.app))
         .show();
 }
@@ -290,7 +293,7 @@ fn show_call(call: &CallInfo) {
 fn show_file_received(path: &Path, name: &str) {
     let _ = notify_rust::Notification::new()
         .appname("Puente")
-        .summary("Archivo recibido")
+        .summary(t().file_received_title)
         .body(&escape_markup(&format!("{name}\n{}", path.display())))
         .show();
 }

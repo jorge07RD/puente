@@ -139,6 +139,8 @@ pub enum PhoneCommand {
     StopMirror,
     Reply { key: String, text: String },
     CallAction { key: String, answer: bool },
+    /// Callar la música en el móvil porque ya suena en la PC.
+    MutePhone { on: bool },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]

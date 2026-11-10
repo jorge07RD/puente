@@ -19,21 +19,21 @@ class ShareActivity : Activity() {
         super.onCreate(savedInstanceState)
         PhoneRuntime.ensureStarted(this)
         setContentView(TextView(this).apply {
-            text = "Enviando a la PC…"
+            text = PhoneTexts.sending
             setPadding(PADDING, PADDING, PADDING, PADDING)
         })
 
         val files = sharedFiles()
         if (files.isEmpty()) {
             intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.let { Native.onClipboard(it.toString()) }
-            finishWith("Enviado a la PC")
+            finishWith(PhoneTexts.sent)
             return
         }
 
         // Android retira el acceso a estos archivos cuando esta pantalla se cierra.
         thread(name = "puente-compartir") {
             val allSent = files.map(::send).all { it }
-            runOnUiThread { finishWith(if (allSent) "Enviado a la PC" else "No se pudo enviar. ¿Está conectado Puente?") }
+            runOnUiThread { finishWith(if (allSent) PhoneTexts.sent else PhoneTexts.sendFailed) }
         }
     }
 

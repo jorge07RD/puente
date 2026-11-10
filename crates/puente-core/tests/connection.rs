@@ -362,6 +362,32 @@ fn the_audio_choice_survives_a_restart() {
     assert!(!second.audio_enabled());
 }
 
+#[test]
+fn the_phone_stays_quiet_only_while_the_desktop_can_be_heard() {
+    let desktop_dir = tempfile::tempdir().unwrap();
+    let phone_dir = tempfile::tempdir().unwrap();
+    let port = free_port();
+    let desktop = engine(Role::Desktop, desktop_dir.path(), port);
+    desktop.set_phone_muted(true);
+    let phone = engine(Role::Phone, phone_dir.path(), port);
+    pair(&desktop, &phone);
+    let wait = Duration::from_secs(5);
+    let next_mute = || {
+        let task: serde_json::Value = serde_json::from_str(&phone.next_task(wait).unwrap()).unwrap();
+        assert_eq!(task["command"], "mute_phone");
+        task["on"].as_bool().unwrap()
+    };
+
+    assert!(next_mute(), "la preferencia se aplica al conectar");
+    desktop.set_audio_enabled(false);
+    assert!(!next_mute(), "sin audio en la PC el móvil debe sonar");
+    desktop.set_audio_enabled(true);
+    assert!(next_mute());
+
+    drop(desktop);
+    assert!(!next_mute(), "al cortarse la conexión el móvil recupera el sonido");
+}
+
 fn sample_call() -> CallInfo {
     CallInfo {
         key: "llamada".to_string(),

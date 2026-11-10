@@ -11,7 +11,8 @@ pub mod tls;
 pub mod transfers;
 pub mod wire;
 
-pub use engine::{Config, DesktopEvent, Engine, Found, Status, View};
+pub use engine::{Config, DesktopEvent, Engine, FileNote, Found, Problem, Status, View};
+pub use settings::LanguageChoice;
 pub use identity::{Fingerprint, Identity};
 pub use pairing::Role;
 pub use peers::{Peer, PeerStore};

@@ -1,6 +1,7 @@
 package dev.puente.app
 
 import android.accessibilityservice.AccessibilityService
+import android.graphics.PixelFormat
 import android.graphics.PointF
 import android.hardware.display.DisplayManager
 import android.os.Build
@@ -10,6 +11,8 @@ import android.os.Looper
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Display
+import android.view.View
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction
@@ -25,9 +28,13 @@ class InputService : AccessibilityService() {
     @Volatile
     private var running = false
 
+    /** Ventana invisible que impide que la pantalla se apague y se bloquee. */
+    private var awake: View? = null
+
     override fun onServiceConnected() {
         if (running) return
         running = true
+        instance = this
         PhoneRuntime.ensureStarted(this)
         Native.onInputState(true)
         thread(name = "puente-input") {
@@ -44,6 +51,8 @@ class InputService : AccessibilityService() {
 
     override fun onDestroy() {
         running = false
+        if (instance === this) instance = null
+        keepScreenOn(false)
         Native.onInputState(false)
         super.onDestroy()
     }
@@ -175,9 +184,42 @@ class InputService : AccessibilityService() {
         return metrics
     }
 
-    private companion object {
-        const val TAG = "puente"
-        const val WAIT_MILLISECONDS = 500
-        const val SCROLL_FRACTION_PER_LINE = 0.12f
+    /** Devuelve falso si Android no dejó crear la ventana. */
+    fun keepScreenOn(on: Boolean): Boolean {
+        val windows = getSystemService(WindowManager::class.java)
+        if (!on) {
+            awake?.let { windows.removeView(it) }
+            awake = null
+            return true
+        }
+        if (awake != null) return true
+        val params = WindowManager.LayoutParams(
+            1,
+            1,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+            PixelFormat.TRANSLUCENT,
+        )
+        val view = View(this)
+        return try {
+            windows.addView(view, params)
+            awake = view
+            true
+        } catch (error: RuntimeException) {
+            Log.w(TAG, "no se pudo mantener la pantalla encendida", error)
+            false
+        }
+    }
+
+    companion object {
+        /** El servicio activo, si el usuario activó la Accesibilidad. Solo desde el hilo principal. */
+        var instance: InputService? = null
+            private set
+
+        private const val TAG = "puente"
+        private const val WAIT_MILLISECONDS = 500
+        private const val SCROLL_FRACTION_PER_LINE = 0.12f
     }
 }

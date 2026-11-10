@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="input_service_description">Permite manejar este móvil con el ratón y el teclado de tu PC emparejada mientras compartes la pantalla con Puente.</string>
+    <string name="input_service_description">Lets you control this phone with the mouse and keyboard of your paired PC while you share the screen with Puente.</string>
+    <string name="share_label">Send to PC</string>
+    <string name="notification_service_label">Puente: notifications on the PC</string>
+    <string name="input_service_label">Puente: control from the PC</string>
 </resources>

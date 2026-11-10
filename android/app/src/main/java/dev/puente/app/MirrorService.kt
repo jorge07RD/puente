@@ -40,14 +40,30 @@ class MirrorService : Service() {
     private var audio: AudioCapture? = null
     private var size: CaptureSize? = null
     private var screenLock: PowerManager.WakeLock? = null
+    private var screenKept: String? = null
 
-    /** La pantalla sigue encendida solo mientras alguien la está mirando desde la PC. */
+    /**
+     * La pantalla sigue encendida, y por tanto sin bloquearse, solo mientras alguien la
+     * mira desde la PC. One UI puede ignorar el wake lock, que está obsoleto; la ventana
+     * de Accesibilidad sí la respeta. El wake lock queda para cuando no hay Accesibilidad.
+     */
     private val screenKeeper = object : Runnable {
         override fun run() {
             val lock = screenLock ?: return
+            val linked = Native.isLinked()
             when {
-                Native.isLinked() && !lock.isHeld -> lock.acquire()
-                !Native.isLinked() && lock.isHeld -> lock.release()
+                linked && !lock.isHeld -> lock.acquire()
+                !linked && lock.isHeld -> lock.release()
+            }
+            val overlay = InputService.instance?.keepScreenOn(linked)
+            val state = when {
+                !linked -> "pantalla libre: sin PC"
+                overlay == true -> "pantalla encendida: ventana de Accesibilidad"
+                else -> "pantalla encendida: solo wake lock"
+            }
+            if (state != screenKept) {
+                screenKept = state
+                Native.log(state)
             }
             handler.postDelayed(this, SCREEN_CHECK_MILLISECONDS)
         }
@@ -120,6 +136,8 @@ class MirrorService : Service() {
         handler.removeCallbacks(screenKeeper)
         screenLock?.takeIf { it.isHeld }?.release()
         screenLock = null
+        InputService.instance?.keepScreenOn(false)
+        screenKept = null
     }
 
     /** El sonido es opcional: si falla, la pantalla sigue compartiéndose. */
@@ -127,6 +145,7 @@ class MirrorService : Service() {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
         try {
             audio = AudioCapture(granted)
+            PhoneSilence.setCapturing(this, true)
         } catch (error: Exception) {
             Log.w(TAG, "no se pudo capturar el audio", error)
         }
@@ -149,6 +168,7 @@ class MirrorService : Service() {
 
     /** La pantalla en Rust solo se puede crear una vez por proceso. */
     override fun onTaskRemoved(rootIntent: Intent?) {
+        PhoneSilence.setCapturing(this, false)
         stopSelf()
         Process.killProcess(Process.myPid())
     }
@@ -157,6 +177,7 @@ class MirrorService : Service() {
         running = false
         releaseScreen()
         Native.onMirrorState(false)
+        PhoneSilence.setCapturing(this, false)
         audio?.stop()
         audio = null
         display?.release()
@@ -191,7 +212,7 @@ class MirrorService : Service() {
         }
 
     private fun buildNotification(): Notification {
-        val channel = NotificationChannel(CHANNEL_ID, "Pantalla compartida", NotificationManager.IMPORTANCE_LOW)
+        val channel = NotificationChannel(CHANNEL_ID, PhoneTexts.channel, NotificationManager.IMPORTANCE_LOW)
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
 
         val stopIntent = PendingIntent.getService(
@@ -202,13 +223,13 @@ class MirrorService : Service() {
         )
         val stopAction = Notification.Action.Builder(
             Icon.createWithResource(this, android.R.drawable.ic_menu_close_clear_cancel),
-            "Detener",
+            PhoneTexts.stop,
             stopIntent,
         ).build()
 
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_view)
-            .setContentTitle("Puente está compartiendo tu pantalla")
+            .setContentTitle(PhoneTexts.sharingTitle)
             .setOngoing(true)
             .addAction(stopAction)
             .build()

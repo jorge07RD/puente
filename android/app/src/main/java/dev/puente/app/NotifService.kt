@@ -144,7 +144,7 @@ class NotifService : NotificationListenerService() {
 
     private fun callerName(notification: Notification): String =
         notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.takeIf { it.isNotBlank() }
-            ?: "Número desconocido"
+            ?: PhoneTexts.unknownNumber
 
     private fun callControls(notification: Notification): CallControls {
         val actions = notification.actions.orEmpty()

@@ -13,6 +13,7 @@ use puente_core::{Engine, Status, View};
 
 use crate::{DesktopActions, RecentFile};
 use crate::dots::{self, BridgeState};
+use crate::i18n::{self, t};
 use crate::motion::{self, LinkMotion};
 use crate::icons::{self, Icon};
 use crate::parts::{
@@ -286,7 +287,7 @@ pub fn draw(
     match &view.status {
         Status::Searching => draw_waiting(ui, area, &frame, None),
         Status::Connecting { name } => {
-            let text = format!("Conectando con {name}");
+            let text = (t().connecting_to)(name);
             draw_waiting(ui, area, &frame, Some(&text));
         }
         Status::Pairing {
@@ -325,19 +326,22 @@ fn draw_waiting(ui: &mut egui::Ui, area: Rect, frame: &Frame, status: Option<&st
         dots::paint_bridge(ui.painter(), bridge, frame.bridge);
         ui.add_space(20.0);
 
-        label(ui, status.unwrap_or("Esperando al móvil"));
+        label(ui, status.unwrap_or(t().waiting_for_phone));
         ui.add_space(20.0);
         if let Some(error) = &frame.view.last_error {
-            ui.colored_label(ACCENT, error);
+            let shown = ui.colored_label(ACCENT, i18n::problem(error));
+            if let puente_core::Problem::Connection(detail) = error {
+                shown.on_hover_text(detail);
+            }
             ui.add_space(12.0);
         }
 
         if frame.view.paired.is_empty() {
-            ui.label("1. Instala Puente en tu móvil Android.");
-            ui.label("2. Ábrela con el móvil en esta misma Wi-Fi.");
-            ui.label("3. Toca esta PC y compara el código.");
+            for step in t().install_steps {
+                ui.label(step);
+            }
         } else {
-            ui.label("Abre Puente en el móvil y se conectará solo.");
+            ui.label(t().open_on_phone);
             ui.add_space(16.0);
             draw_paired(ui, frame);
         }
@@ -348,7 +352,7 @@ fn draw_paired(ui: &mut egui::Ui, frame: &Frame) {
     for peer in &frame.view.paired {
         ui.horizontal(|ui| {
             ui.add(egui::Label::new(&peer.name).truncate());
-            if pill_button(ui, "Olvidar").clicked() {
+            if pill_button(ui, t().forget).clicked() {
                 let _ = frame.engine.forget(peer.fingerprint);
             }
         });
@@ -361,7 +365,7 @@ fn draw_pairing(ui: &mut egui::Ui, area: Rect, frame: &Frame, name: &str, code: 
 
     let content = Rect::from_center_size(area.center(), vec2(area.width(), CONTENT_HEIGHT.min(area.height())));
     centered(ui, content, |ui| {
-        label(ui, &format!("Emparejar con {name}"));
+        label(ui, &(t().pair_with)(name));
         ui.add_space(24.0);
         dot_figure(ui, &spaced_code(code), "", PITCH, INK);
         ui.add_space(24.0);
@@ -370,19 +374,19 @@ fn draw_pairing(ui: &mut egui::Ui, area: Rect, frame: &Frame, name: &str, code: 
             let (bridge, _) = ui.allocate_exact_size(vec2(360.0_f32.min(area.width()), 64.0), Sense::hover());
             dots::paint_bridge(ui.painter(), bridge, frame.bridge);
             ui.add_space(12.0);
-            label(ui, "Esperando al otro dispositivo");
+            label(ui, t().waiting_other);
             return;
         }
 
-        ui.label("Acepta solo si este código es igual en los dos dispositivos.");
+        ui.label(t().accept_if_same);
         ui.add_space(20.0);
         let width = 280.0;
         let row = Rect::from_center_size(pos2(ui.max_rect().center().x, ui.cursor().top() + 22.0), vec2(width, 44.0));
         ui.scope_builder(UiBuilder::new().max_rect(row).layout(Layout::left_to_right(Align::Center)), |ui| {
-            if pill(ui, "Coinciden", 44.0, true).clicked() {
+            if pill(ui, t().codes_match, 44.0, true).clicked() {
                 frame.engine.answer_pairing(true);
             }
-            if pill(ui, "Cancelar", 44.0, false).clicked() {
+            if pill(ui, t().cancel, 44.0, false).clicked() {
                 frame.engine.answer_pairing(false);
             }
         });
@@ -437,14 +441,14 @@ fn draw_connected(
                 draw_card_stack(ui, area, frame, state, name, true);
             } else {
                 cards_visible = false;
-                if draw_center(ui, area, frame, shown, &mut state.touching, Toggle::Label("Tarjetas")) {
+                if draw_center(ui, area, frame, shown, &mut state.touching, Toggle::Label(t().cards)) {
                     state.show_cards = true;
                 }
             }
         }
         _ if state.focus && streaming => {
             cards_visible = false;
-            if draw_center(ui, area, frame, shown, &mut state.touching, Toggle::Label("Mostrar tarjetas"))
+            if draw_center(ui, area, frame, shown, &mut state.touching, Toggle::Label(t().show_cards))
                 || toggle_requested
             {
                 state.focus = false;
@@ -512,15 +516,15 @@ fn draw_call_banner(ui: &mut egui::Ui, rect: Rect, engine: &Engine, call: &CallI
                 answer,
             });
         };
-        if call.can_decline && pill(ui, "Rechazar", BUTTON_HEIGHT, true).clicked() {
+        if call.can_decline && pill(ui, t().decline, BUTTON_HEIGHT, true).clicked() {
             send(false);
         }
-        if call.can_answer && pill(ui, "Contestar", BUTTON_HEIGHT, false).clicked() {
+        if call.can_answer && pill(ui, t().answer, BUTTON_HEIGHT, false).clicked() {
             send(true);
         }
         ui.with_layout(Layout::top_down(Align::Min), |ui| {
             ui.spacing_mut().item_spacing.y = 2.0;
-            label(ui, &format!("Llamada · {}", displayable(ui, &call.app)));
+            label(ui, &(t().call_in_app)(&displayable(ui, &call.app)));
             let caller = displayable(ui, &call.caller);
             ui.add(egui::Label::new(RichText::new(caller).size(16.0).color(INK)).truncate());
         });
@@ -553,7 +557,7 @@ fn send_dropped_files(ui: &egui::Ui, frame: &Frame) {
 
 fn draw_drop_overlay(ui: &egui::Ui, area: Rect) {
     dots::paint_outline(ui.painter(), area.shrink(4.0), 8.0, 3, ACCENT);
-    caption(ui, area.center(), "Suelta para enviar al móvil");
+    caption(ui, area.center(), t().drop_to_send_phone);
 }
 
 fn draw_card_stack(ui: &mut egui::Ui, area: Rect, frame: &Frame, state: &mut DesktopState, name: &str, offer_phone: bool) {
@@ -577,7 +581,7 @@ fn draw_card_stack(ui: &mut egui::Ui, area: Rect, frame: &Frame, state: &mut Des
     if offer_phone {
         let builder = UiBuilder::new().max_rect(toolbar).layout(Layout::right_to_left(Align::Center));
         ui.scope_builder(builder, |ui| {
-            if pill_button(ui, "Ver móvil").clicked() {
+            if pill_button(ui, t().view_phone).clicked() {
                 state.show_cards = false;
             }
         });
@@ -610,7 +614,7 @@ fn draw_center(
         .layout(Layout::left_to_right(Align::Center));
     ui.scope_builder(builder, |ui| {
         if icon_button(ui, Icon::Stop, 44.0, true)
-            .on_hover_text("Cortar la transmisión")
+            .on_hover_text(t().stop_stream)
             .clicked()
         {
             frame.engine.send_command(PhoneCommand::StopMirror);
@@ -626,7 +630,7 @@ fn draw_center(
         if frame.view.input_enabled {
             draw_navigation(ui, frame.engine);
         } else {
-            label(ui, "Activa el control en el móvil");
+            label(ui, t().enable_control);
         }
     });
 
@@ -636,9 +640,9 @@ fn draw_center(
     let toggled = ui
         .scope_builder(builder, |ui| match toggle {
             Toggle::Icon => icon_button(ui, Icon::Panels, 44.0, false)
-                .on_hover_text("Ocultar tarjetas (F2)")
+                .on_hover_text(t().hide_cards)
                 .clicked(),
-            Toggle::Label(text) => pill_button(ui, text).on_hover_text("Atajo: F2").clicked(),
+            Toggle::Label(text) => pill_button(ui, text).on_hover_text(t().shortcut_f2).clicked(),
         })
         .inner;
 
@@ -667,9 +671,9 @@ fn draw_screen(ui: &mut egui::Ui, stage: Rect, texture: &TextureHandle) -> Optio
 fn draw_navigation(ui: &mut egui::Ui, engine: &Engine) {
     ui.spacing_mut().item_spacing.x = 28.0;
     let buttons = [
-        (Icon::Back, NavAction::Back, "Atrás"),
-        (Icon::Home, NavAction::Home, "Inicio"),
-        (Icon::Recents, NavAction::Recents, "Recientes"),
+        (Icon::Back, NavAction::Back, t().back),
+        (Icon::Home, NavAction::Home, t().home),
+        (Icon::Recents, NavAction::Recents, t().recents),
     ];
     for (icon, action, hint) in buttons {
         if icon_button(ui, icon, 44.0, false).on_hover_text(hint).clicked() {
@@ -688,7 +692,7 @@ fn link_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame, name: &str) {
     const HINT_MIN_HEIGHT: f32 = 20.0;
     let view = frame.view;
 
-    card_full(ui, rect, "01", "Enlace", true, "", |ui| {
+    card_full(ui, rect, "01", t().card_link, true, "", |ui| {
         // En tarjetas bajas el nombre cede su sitio para que las cifras quepan enteras.
         let show_name = ui.available_height() >= NAME_MIN_HEIGHT;
         let reserved = STATS_HEIGHT + if show_name { 30.0 } else { 8.0 };
@@ -717,19 +721,15 @@ fn link_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame, name: &str) {
         });
         if !view.mirroring && ui.available_height() >= HINT_MIN_HEIGHT {
             ui.add_space(6.0);
-            label(ui, "Comparte la pantalla desde el móvil");
+            label(ui, t().share_from_phone);
         }
     });
 }
 
-/// Desvincular pide un segundo toque: deshacerlo obliga a emparejar otra vez.
-fn unpair_control(ui: &mut egui::Ui, card: Rect, frame: &Frame, state: &mut DesktopState) {
-    const CONFIRM_SECONDS: f32 = 4.0;
-    const HEADER_HEIGHT: f32 = 28.0;
-    /// Por debajo de este ancho, el texto chocaría con el título de la tarjeta.
-    const TEXT_MIN_WIDTH: f32 = 300.0;
+const HEADER_HEIGHT: f32 = 28.0;
 
-    let confirming = state.unpair_until.is_some_and(|until| frame.time < until);
+/// Un control a la derecha del título de una tarjeta.
+fn in_card_header(ui: &mut egui::Ui, card: Rect, body: impl FnOnce(&mut egui::Ui)) {
     let header = Rect::from_min_size(
         card.min + vec2(PADDING, PADDING - 8.0),
         vec2(card.width() - PADDING * 2.0, HEADER_HEIGHT),
@@ -737,19 +737,29 @@ fn unpair_control(ui: &mut egui::Ui, card: Rect, frame: &Frame, state: &mut Desk
     let builder = UiBuilder::new()
         .max_rect(header)
         .layout(Layout::right_to_left(Align::Center));
-    ui.scope_builder(builder, |ui| {
+    ui.scope_builder(builder, body);
+}
+
+/// Desvincular pide un segundo toque: deshacerlo obliga a emparejar otra vez.
+fn unpair_control(ui: &mut egui::Ui, card: Rect, frame: &Frame, state: &mut DesktopState) {
+    const CONFIRM_SECONDS: f32 = 4.0;
+    /// Por debajo de este ancho, el texto chocaría con el título de la tarjeta.
+    const TEXT_MIN_WIDTH: f32 = 300.0;
+
+    let confirming = state.unpair_until.is_some_and(|until| frame.time < until);
+    in_card_header(ui, card, |ui| {
         if confirming {
             ui.ctx().request_repaint_after(TRANSFER_REFRESH);
-            if pill(ui, "¿Seguro?", HEADER_HEIGHT, true).clicked() {
+            if pill(ui, t().sure, HEADER_HEIGHT, true).clicked() {
                 state.unpair_until = None;
                 let _ = frame.engine.unpair();
             }
         } else {
             let pressed = if card.width() >= TEXT_MIN_WIDTH {
-                pill(ui, "Desvincular", HEADER_HEIGHT, false).clicked()
+                pill(ui, t().unpair, HEADER_HEIGHT, false).clicked()
             } else {
                 icon_button(ui, Icon::Unlink, HEADER_HEIGHT, false)
-                    .on_hover_text("Desvincular este móvil")
+                    .on_hover_text(t().unpair_this_phone)
                     .clicked()
             };
             if pressed {
@@ -768,7 +778,7 @@ fn battery_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
     const PITCH_PER_RADIUS: f32 = 0.072;
     const MAX_FIGURE_PITCH: f32 = 12.0;
 
-    card_full(ui, rect, "02", "Batería", false, "", |ui| {
+    card_full(ui, rect, "02", t().card_battery, false, "", |ui| {
         let (space, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
         let ring_area = Rect::from_min_max(space.min, pos2(space.right(), space.bottom() - CAPTION_HEIGHT));
         let radius = (ring_area.height().min(ring_area.width()) / 2.0 - 5.0).max(12.0);
@@ -810,7 +820,7 @@ fn battery_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
             ui.painter().text(
                 pos2(space.center().x, space.bottom() - CAPTION_HEIGHT / 2.0),
                 egui::Align2::CENTER_CENTER,
-                "CARGANDO",
+                t().charging.to_uppercase(),
                 egui::FontId::new(TEXT_LABEL, crate::theme::medium()),
                 LOADING,
             );
@@ -837,8 +847,10 @@ fn audio_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
     let sounding = enabled && levels.iter().any(|level| *level > SILENCE_LEVEL);
     const SWITCH_HEIGHT: f32 = 28.0;
 
-    card_full(ui, rect, "03", "Audio", sounding, "", |ui| {
-        let height = (ui.available_height() - SWITCH_HEIGHT - 6.0).max(24.0);
+    card_full(ui, rect, "03", t().card_audio, sounding, "", |ui| {
+        let can_mute_phone = enabled && frame.view.mirroring;
+        let rows = if can_mute_phone { 2.0 } else { 1.0 };
+        let height = (ui.available_height() - (SWITCH_HEIGHT + 6.0) * rows).max(24.0);
         let (wave, _) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::hover());
         let mut columns = vec![0.0; WAVE_COLUMNS.saturating_sub(levels.len())];
         if enabled {
@@ -850,12 +862,20 @@ fn audio_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
         ui.add_space(6.0);
 
         let status = match (enabled, sounding) {
-            (false, _) => "Desactivado",
-            (true, true) => "Sonando en la PC",
-            (true, false) => "Sin audio",
+            (false, _) => t().audio_off,
+            (true, true) => t().audio_playing,
+            (true, false) => t().audio_silent,
         };
         if switch_row(ui, status, enabled, SWITCH_HEIGHT).clicked() {
             frame.engine.set_audio_enabled(!enabled);
+        }
+        if can_mute_phone {
+            let muted = frame.view.phone_muted;
+            let row = switch_row(ui, t().mute_phone, muted, SWITCH_HEIGHT)
+                .on_hover_text(t().mute_phone_hint);
+            if row.clicked() {
+                frame.engine.set_phone_muted(!muted);
+            }
         }
     });
 }
@@ -864,28 +884,28 @@ fn music_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
     let media = frame.view.media.as_ref();
     let send = |action| frame.engine.send_command(PhoneCommand::Media { action });
 
-    card_full(ui, rect, "05", "Música", false, "", |ui| {
+    card_full(ui, rect, "05", t().card_music, false, "", |ui| {
         let Some(media) = media else {
-            label(ui, "Nada sonando");
+            label(ui, t().nothing_playing);
             return;
         };
         let title = displayable(ui, &media.title);
-        let title = if title.is_empty() { "Sin título".to_string() } else { title };
+        let title = if title.is_empty() { t().untitled.to_string() } else { title };
         ui.add(egui::Label::new(RichText::new(title).size(14.0)).truncate());
         let artist = displayable(ui, &media.artist);
         ui.add(egui::Label::new(RichText::new(artist).color(INK_SOFT)).truncate());
         ui.add_space(6.0);
         ui.horizontal_centered(|ui| {
             ui.add_space(((ui.available_width() - 40.0 * 2.0 - 52.0 - GAP * 2.0) / 2.0).max(0.0));
-            if icon_button(ui, Icon::Previous, 40.0, false).on_hover_text("Anterior").clicked() {
+            if icon_button(ui, Icon::Previous, 40.0, false).on_hover_text(t().previous).clicked() {
                 send(MediaAction::Previous);
             }
             let icon = if media.playing { Icon::Pause } else { Icon::Play };
-            let hint = if media.playing { "Pausa" } else { "Reproducir" };
+            let hint = if media.playing { t().pause } else { t().play };
             if icon_button(ui, icon, 52.0, true).on_hover_text(hint).clicked() {
                 send(MediaAction::PlayPause);
             }
-            if icon_button(ui, Icon::Next, 40.0, false).on_hover_text("Siguiente").clicked() {
+            if icon_button(ui, Icon::Next, 40.0, false).on_hover_text(t().next).clicked() {
                 send(MediaAction::Next);
             }
         });
@@ -904,9 +924,9 @@ fn notices_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame, state: &mut Deskto
 
     let count = if notices.is_empty() { String::new() } else { notices.len().to_string() };
 
-    card_full(ui, rect, "06", "Avisos", !notices.is_empty(), &count, |ui| {
+    card_full(ui, rect, "06", t().card_notices, !notices.is_empty(), &count, |ui| {
         if notices.is_empty() {
-            label(ui, "Sin avisos");
+            label(ui, t().no_notices);
             return;
         }
         egui::ScrollArea::vertical()
@@ -929,7 +949,7 @@ fn draw_reply_editor(ui: &mut egui::Ui, engine: &Engine, key: &str, slot: &mut O
     };
     let response = ui.add(
         egui::TextEdit::singleline(&mut draft.text)
-            .hint_text("Escribe tu respuesta")
+            .hint_text(t().reply_hint)
             .desired_width(ui.available_width()),
     );
     if draft.needs_focus {
@@ -941,8 +961,8 @@ fn draw_reply_editor(ui: &mut egui::Ui, engine: &Engine, key: &str, slot: &mut O
 
     let (send, cancel) = ui
         .horizontal(|ui| {
-            let send = pill(ui, "Enviar", BUTTON_HEIGHT, true).clicked();
-            let cancel = pill(ui, "Cancelar", BUTTON_HEIGHT, false).clicked();
+            let send = pill(ui, t().send, BUTTON_HEIGHT, true).clicked();
+            let cancel = pill(ui, t().cancel, BUTTON_HEIGHT, false).clicked();
             (send, cancel)
         })
         .inner;
@@ -984,7 +1004,7 @@ fn draw_notice(ui: &mut egui::Ui, frame: &Frame, info: &NotificationInfo, reply:
                 ui.add_space(4.0);
                 if reply.as_ref().is_some_and(|draft| draft.key == info.key) {
                     draw_reply_editor(ui, engine, &info.key, reply);
-                } else if pill(ui, "Responder", 26.0, false).clicked() {
+                } else if pill(ui, t().reply, 26.0, false).clicked() {
                     *reply = Some(ReplyDraft {
                         key: info.key.clone(),
                         text: String::new(),
@@ -993,10 +1013,10 @@ fn draw_notice(ui: &mut egui::Ui, frame: &Frame, info: &NotificationInfo, reply:
                 }
             }
             if let Some(outcome) = frame.view.last_reply.as_ref().filter(|outcome| outcome.key == info.key) {
-                label(ui, if outcome.delivered { "Respuesta enviada" } else { "No se pudo enviar" });
+                label(ui, if outcome.delivered { t().reply_sent } else { t().reply_failed });
             }
         });
-        if icon_button(ui, Icon::Close, CLOSE_SIZE, false).on_hover_text("Descartar").clicked() {
+        if icon_button(ui, Icon::Close, CLOSE_SIZE, false).on_hover_text(t().dismiss).clicked() {
             engine.send_command(PhoneCommand::Dismiss {
                 key: info.key.clone(),
             });
@@ -1011,7 +1031,7 @@ fn ring_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame, state: &mut DesktopSt
 
     let remaining = state.ring_ends.map(|ends| (ends - frame.time).ceil().max(0.0));
 
-    card_full(ui, rect, "04", "Buscar móvil", remaining.is_some(), "", |ui| {
+    card_full(ui, rect, "04", t().card_find, remaining.is_some(), "", |ui| {
         let (space, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
         let room = Rect::from_min_max(space.min, pos2(space.right(), space.bottom() - CAPTION_HEIGHT));
         let outer = (room.height().min(room.width()) / 2.0 - 2.0).max(BUTTON / 2.0 + 4.0);
@@ -1023,7 +1043,7 @@ fn ring_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame, state: &mut DesktopSt
 
         let button = Rect::from_center_size(room.center(), Vec2::splat(BUTTON));
         let icon = if remaining.is_some() { Icon::Stop } else { Icon::Bell };
-        let hint = if remaining.is_some() { "Parar" } else { "Hacer sonar el móvil" };
+        let hint = if remaining.is_some() { t().stop_ring } else { t().ring_phone };
         if icon_button_at(ui, button, icon, true).on_hover_text(hint).clicked() {
             let on = remaining.is_none();
             state.ring_ends = on.then_some(frame.time + RING_SECONDS);
@@ -1031,8 +1051,8 @@ fn ring_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame, state: &mut DesktopSt
         }
 
         let text = match remaining {
-            Some(seconds) => format!("Sonando {seconds:.0} s"),
-            None => "Hacer sonar".to_string(),
+            Some(seconds) => (t().ringing)(seconds),
+            None => t().ring.to_string(),
         };
         caption(ui, pos2(space.center().x, space.bottom() - CAPTION_HEIGHT / 2.0), &text);
     });
@@ -1045,7 +1065,7 @@ fn files_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
 
     let transfer = frame.actions.and_then(DesktopActions::transfer);
 
-    card_full(ui, rect, "07", "Archivos", transfer.is_some(), "", |ui| {
+    card_full(ui, rect, "07", t().card_files, transfer.is_some(), "", |ui| {
         let (space, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
         let zone = Rect::from_min_max(space.min, pos2(space.right(), space.bottom() - STATUS_HEIGHT));
         let status = Rect::from_min_max(pos2(space.left(), zone.bottom() + 4.0), space.max);
@@ -1062,7 +1082,7 @@ fn files_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
         let button_rect = Rect::from_center_size(button_center, vec2(zone.width(), BUTTON_HEIGHT));
 
         if frame.hovering_files {
-            caption(ui, zone.center(), "Suelta para enviar");
+            caption(ui, zone.center(), t().drop_to_send);
         } else {
             if has_list {
                 let list = Rect::from_min_max(
@@ -1071,14 +1091,14 @@ fn files_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
                 );
                 draw_recent_files(ui, list, &frame.recent_files);
             } else {
-                caption(ui, zone.center() - vec2(0.0, 16.0), "Arrastra archivos aquí");
+                caption(ui, zone.center() - vec2(0.0, 16.0), t().drag_files_here);
             }
             let builder = UiBuilder::new()
                 .max_rect(button_rect)
                 .layout(Layout::top_down(Align::Center));
             ui.scope_builder(builder, |ui| {
                 if let Some(actions) = frame.actions
-                    && pill_button(ui, "Elegir").clicked()
+                    && pill_button(ui, t().choose).clicked()
                 {
                     actions.pick_and_send_file();
                 }
@@ -1094,7 +1114,7 @@ fn files_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
                 if let Some(last_file) = &frame.view.last_file {
                     let builder = UiBuilder::new().max_rect(status);
                     ui.scope_builder(builder, |ui| {
-                        ui.add(egui::Label::new(RichText::new(last_file).color(INK_SOFT)).truncate());
+                        ui.add(egui::Label::new(RichText::new(i18n::file_note(last_file)).color(INK_SOFT)).truncate());
                     });
                 }
             }
@@ -1127,7 +1147,7 @@ pub(crate) fn draw_recent_files(ui: &mut egui::Ui, area: Rect, files: &[RecentFi
         icons::paint(&painter, icon_rect, icon, color.gamma_multiply(file.opacity));
 
         let room = area.width() - ICON - 8.0;
-        let text = if file.delivered { file.name.clone() } else { format!("No se pudo: {}", file.name) };
+        let text = if file.delivered { file.name.clone() } else { (t().not_sent)(&file.name) };
         let mut job = egui::text::LayoutJob::simple_singleline(text, font.clone(), INK.gamma_multiply(file.opacity));
         job.wrap = egui::text::TextWrapping::truncate_at_width(room);
         let galley = painter.layout_job(job);
@@ -1143,7 +1163,7 @@ pub(crate) fn draw_recent_files(ui: &mut egui::Ui, area: Rect, files: &[RecentFi
         painter.text(
             pos2(area.left() + ICON + 8.0, center_y),
             egui::Align2::LEFT_CENTER,
-            if shown == 0 { format!("{hidden} archivos") } else { format!("Y {hidden} más") },
+            if shown == 0 { (t().file_count)(hidden) } else { (t().and_more)(hidden) },
             font,
             INK_SOFT,
         );
@@ -1153,16 +1173,26 @@ pub(crate) fn draw_recent_files(ui: &mut egui::Ui, area: Rect, files: &[RecentFi
 fn settings_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
     const ROW: f32 = 30.0;
 
-    card_full(ui, rect, "08", "Ajustes", false, "", |ui| {
+    card_full(ui, rect, "08", t().card_settings, false, "", |ui| {
         if let Some(actions) = frame.actions {
             let on = actions.clipboard_sync();
-            if switch_row(ui, "Portapapeles", on, ROW).clicked() {
+            if switch_row(ui, t().clipboard, on, ROW).clicked() {
                 actions.set_clipboard_sync(!on);
             }
         }
         let animations = frame.view.animations;
-        if switch_row(ui, "Animaciones", animations, ROW).clicked() {
+        if switch_row(ui, t().animations, animations, ROW).clicked() {
             frame.engine.set_animations(!animations);
+        }
+    });
+    // En la cabecera: el cuerpo de la tarjeta solo tiene sitio para dos filas.
+    let language = frame.view.language;
+    in_card_header(ui, rect, |ui| {
+        if pill(ui, &i18n::choice_label(language), HEADER_HEIGHT, false)
+            .on_hover_text(t().language)
+            .clicked()
+        {
+            frame.engine.set_language(language.next());
         }
     });
 }

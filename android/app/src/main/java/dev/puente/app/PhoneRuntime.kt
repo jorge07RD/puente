@@ -20,6 +20,7 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
+import java.util.Locale
 import kotlin.concurrent.thread
 
 /** Lo que debe existir una sola vez por proceso, lo arranque quien lo arranque. */
@@ -42,6 +43,8 @@ internal object PhoneRuntime {
             started = true
         }
         val app = context.applicationContext
+        PhoneSilence.recover(app)
+        Native.setSystemLanguage(Locale.getDefault().toLanguageTag())
         Native.ensureEngine(app.filesDir.path)
         watchBattery(app)
         thread(name = "puente-tareas", isDaemon = true) {
@@ -107,6 +110,10 @@ internal object PhoneRuntime {
                 "set_clipboard" -> {
                     val value = task.getString("text")
                     handler.post { setClipboard(app, value) }
+                }
+                "mute_phone" -> {
+                    val on = task.getBoolean("on")
+                    handler.post { PhoneSilence.setWanted(app, on) }
                 }
                 "stop_mirror" -> app.stopService(Intent(app, MirrorService::class.java))
                 "save_file" -> saveToDownloads(app, File(task.getString("path")), task.getString("name"))

@@ -2297,7 +2297,7 @@ checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 
 [[package]]
 name = "puente-android"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "android-activity",
  "android_logger",
@@ -2311,7 +2311,7 @@ dependencies = [
 
 [[package]]
 name = "puente-core"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "rcgen",
  "ring",
@@ -2326,7 +2326,7 @@ dependencies = [
 
 [[package]]
 name = "puente-desktop"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "arboard",
  "cpal",
@@ -2337,12 +2337,13 @@ dependencies = [
  "puente-core",
  "puente-ui",
  "rfd",
+ "sys-locale",
  "winit",
 ]
 
 [[package]]
 name = "puente-ui"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "eframe",
  "puente-core",
@@ -2879,6 +2880,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "sys-locale"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8eab9a99a024a169fe8a903cf9d4a3b3601109bcc13bd9e3c6fff259138626c4"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
