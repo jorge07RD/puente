@@ -67,7 +67,7 @@ On Linux, keeping your phone at hand usually takes two tools: **KDE Connect** fo
 | **Find** | Make the phone ring | Rings like an alarm for 30 seconds |
 | **Languages** | Spanish, English and Portuguese | Follows the system language or the one you pick in Settings |
 
-The phone screen stays on while you share it with a connected PC, and you can stop the stream from either side. Press `F2` or the button in the bar to hide the cards and keep only the stream.
+While you share the screen with a connected PC, the phone does not turn off or lock (it needs **Control from the PC** turned on), and you can stop the stream from either side. Press `F2` or the button in the bar to hide the cards and keep only the stream.
 
 On Linux you can also send files from the terminal to the open window:
 
@@ -166,6 +166,7 @@ Working without ADB has a price, because Android imposes these restrictions:
 
 - You have to confirm every time you start sharing the screen.
 - Protected apps, such as banking apps, show up black.
+- **Mute phone** relies on Android still capturing the audio while the music is muted. If the PC goes silent too on your phone, leave it off.
 - The clipboard from the phone to the PC is not automatic: Android does not allow reading it in the background. It is sent when you open Puente or with Share, **Send to PC**.
 - Typing from the PC uses Accessibility and may fail in games or apps with their own interface.
 

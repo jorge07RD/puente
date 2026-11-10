@@ -67,7 +67,7 @@ No Linux, ter o celular à mão costuma exigir duas ferramentas: o **KDE Connect
 | **Achar** | Fazer o celular tocar | Toca como alarme por 30 segundos |
 | **Idiomas** | Espanhol, inglês e português | Segue o idioma do sistema ou o que você escolher em Ajustes |
 
-A tela do celular fica ligada enquanto você a compartilha com um PC conectado, e dá para parar a transmissão de qualquer um dos lados. Com `F2` ou o botão da barra você oculta os cartões e deixa só a transmissão.
+Enquanto você compartilha a tela com um PC conectado, o celular não apaga nem bloqueia (precisa de **Controle pelo PC** ativado), e dá para parar a transmissão de qualquer um dos lados. Com `F2` ou o botão da barra você oculta os cartões e deixa só a transmissão.
 
 No Linux você também pode enviar arquivos pelo terminal para a janela aberta:
 
@@ -166,6 +166,7 @@ Funcionar sem ADB tem um preço, porque o Android impõe estas restrições:
 
 - É preciso confirmar toda vez que começar a compartilhar a tela.
 - Apps protegidos, como os de bancos, aparecem pretos.
+- **Silenciar celular** depende de o Android continuar capturando o áudio com a música em silêncio. Se no seu celular o PC também ficar mudo, deixe desligado.
 - A área de transferência do celular para o PC não é automática: o Android impede lê-la em segundo plano. Ela é enviada ao abrir o Puente ou com Compartilhar, **Enviar ao PC**.
 - Digitar pelo PC usa a Acessibilidade e pode falhar em jogos ou apps com interface própria.
 
