@@ -67,7 +67,7 @@ En Linux, tener el móvil a mano suele exigir dos herramientas: **KDE Connect** 
 | **Buscar** | Hacer sonar el móvil | Suena como alarma durante 30 segundos |
 | **Idiomas** | Español, inglés y portugués | Sigue el idioma del sistema o el que elijas en Ajustes |
 
-La pantalla del móvil se mantiene encendida mientras la compartes con una PC conectada, y puedes cortar la transmisión desde cualquiera de los dos lados. Con `F2` o el botón de la barra ocultas las tarjetas para dejar solo la transmisión.
+Mientras compartes la pantalla con una PC conectada, el móvil no se apaga ni se bloquea (necesita **Control desde la PC** activado), y puedes cortar la transmisión desde cualquiera de los dos lados. Con `F2` o el botón de la barra ocultas las tarjetas para dejar solo la transmisión.
 
 En Linux también puedes enviar archivos desde la terminal a la ventana abierta:
 
@@ -166,6 +166,7 @@ Funcionar sin ADB tiene un precio, porque estas restricciones las impone Android
 
 - Hay que confirmar cada vez que se empieza a compartir la pantalla.
 - Las apps protegidas, como las de bancos, se ven en negro.
+- **Silenciar móvil** depende de que Android siga capturando el audio con la música en silencio. Si en tu móvil también se calla la PC, déjalo apagado.
 - El portapapeles del móvil a la PC no es automático: Android impide leerlo en segundo plano. Se envía al abrir Puente o con Compartir, **Enviar a la PC**.
 - Escribir desde la PC usa Accesibilidad y puede fallar en juegos o apps con interfaz propia.
 
