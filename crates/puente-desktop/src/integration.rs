@@ -95,7 +95,7 @@ pub struct Integration {
     sends: Arc<Mutex<SendLog>>,
 }
 
-pub fn start(engine: Arc<Engine>, audio: AudioMeter) -> Integration {
+pub fn start(engine: Arc<Engine>, audio: AudioMeter, window: Arc<crate::window::WindowControl>) -> Integration {
     let clipboard_sync = Arc::new(AtomicBool::new(true));
     let sends = Arc::new(Mutex::new(SendLog::default()));
     if let Some(events) = engine.take_desktop_events() {
@@ -106,7 +106,9 @@ pub fn start(engine: Arc<Engine>, audio: AudioMeter) -> Integration {
     }
     let (outbox, pending) = channel::<PathBuf>();
     #[cfg(unix)]
-    crate::handoff::listen(engine.clone(), outbox.clone());
+    crate::handoff::listen(engine.clone(), outbox.clone(), window);
+    #[cfg(not(unix))]
+    let _ = window;
     let transfer = Arc::new(Mutex::new(None));
     {
         let engine = engine.clone();

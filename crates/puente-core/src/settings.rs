@@ -33,6 +33,33 @@ impl LanguageChoice {
     }
 }
 
+/// Resolución, nitidez y fluidez del vídeo que envía el móvil.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VideoQuality {
+    /// 1920 px a 60 fps, con los datos ajustados a lo que aguanta la red.
+    #[default]
+    Auto,
+    /// Menos red y batería: 1280 px a 30 fps.
+    Saver,
+    /// 1920 px a 60 fps. Es la que usa el móvil si nadie le pide otra.
+    Balanced,
+    /// 2560 px a 60 fps, con el doble de datos.
+    High,
+}
+
+impl VideoQuality {
+    /// La siguiente al pulsar el selector.
+    pub fn next(self) -> Self {
+        match self {
+            Self::Auto => Self::Saver,
+            Self::Saver => Self::Balanced,
+            Self::Balanced => Self::High,
+            Self::High => Self::Auto,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -42,6 +69,7 @@ pub struct Settings {
     /// Mientras se transmite, el audio del móvil se oye solo en la PC.
     pub phone_muted: bool,
     pub language: LanguageChoice,
+    pub quality: VideoQuality,
 }
 
 impl Default for Settings {
@@ -51,6 +79,7 @@ impl Default for Settings {
             audio: true,
             phone_muted: false,
             language: LanguageChoice::Auto,
+            quality: VideoQuality::Auto,
         }
     }
 }
@@ -107,6 +136,20 @@ mod tests {
         file.save().unwrap();
         assert!(fs::read_to_string(&path).unwrap().contains("\"pt\""));
         assert_eq!(SettingsFile::load(path).current.language, LanguageChoice::Portuguese);
+    }
+
+    #[test]
+    fn the_quality_is_saved_and_cycles_through_the_four_levels() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let mut file = SettingsFile::load(path.clone());
+        assert_eq!(file.current.quality, VideoQuality::Auto);
+        file.current.quality = VideoQuality::High;
+        file.save().unwrap();
+        assert!(fs::read_to_string(&path).unwrap().contains("\"high\""));
+        assert_eq!(SettingsFile::load(path).current.quality, VideoQuality::High);
+        let start = VideoQuality::Auto;
+        assert_eq!(start.next().next().next().next(), start);
     }
 
     #[test]

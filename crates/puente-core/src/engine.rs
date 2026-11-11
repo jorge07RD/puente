@@ -18,7 +18,7 @@ use tokio::time::{MissedTickBehavior, interval, timeout};
 use crate::pairing::{self, PairPrompt};
 use crate::tls::{Secure, TlsContext};
 use crate::session::Outgoing;
-use crate::settings::{LanguageChoice, SettingsFile};
+use crate::settings::{LanguageChoice, SettingsFile, VideoQuality};
 use crate::telemetry::RateMeter;
 use crate::transfers::Incoming;
 use crate::wire::{
@@ -138,6 +138,8 @@ pub struct View {
     /// PC: mientras se transmite, el audio se oye solo aquí.
     pub phone_muted: bool,
     pub language: LanguageChoice,
+    /// PC: calidad del vídeo que se pide al móvil.
+    pub quality: VideoQuality,
     /// PC: llamada entrante en este momento.
     pub call: Option<CallInfo>,
     /// PC: resultado de la última respuesta enviada.
@@ -515,6 +517,7 @@ impl Engine {
             audio_enabled: settings.current.audio,
             phone_muted: settings.current.phone_muted,
             language: settings.current.language,
+            quality: settings.current.quality,
             call: None,
             last_reply: None,
         };
@@ -756,6 +759,16 @@ impl Engine {
             let _ = settings.save();
         }
         self.shared.update(|view| view.language = language);
+    }
+
+    pub fn set_quality(&self, quality: VideoQuality) {
+        {
+            let mut settings = self.shared.settings.lock().expect("ajustes disponibles");
+            settings.current.quality = quality;
+            let _ = settings.save();
+        }
+        self.shared.update(|view| view.quality = quality);
+        self.send_command(PhoneCommand::Quality { level: quality });
     }
 
     pub fn set_animations(&self, enabled: bool) {
@@ -1135,6 +1148,11 @@ async fn drive(shared: &Arc<Shared>, secure: Secure, address: SocketAddr) -> Res
         if view.audio_enabled && view.phone_muted {
             let _ = control.try_send(Message::Command(PhoneCommand::MutePhone { on: true }));
         }
+        // La calidad normal es la que el móvil usa sin que se lo digan, así que un móvil
+        // antiguo, que no conoce esta orden, sigue funcionando mientras no se cambie.
+        if view.quality != VideoQuality::Balanced {
+            let _ = control.try_send(Message::Command(PhoneCommand::Quality { level: view.quality }));
+        }
     }
     *shared.session.lock().expect("sesión disponible") = Some(SessionHandle {
         peer,
@@ -1191,8 +1209,17 @@ async fn drive(shared: &Arc<Shared>, secure: Secure, address: SocketAddr) -> Res
         Role::Phone => {
             shared.deliver_input(&Input::Cancel);
             // Sin la PC nadie oiría nada: el móvil recupera su sonido.
-            if let Ok(task) = serde_json::to_string(&PhoneCommand::MutePhone { on: false }) {
-                let _ = shared.task_out.try_send(task);
+            // La próxima PC puede no pedir calidad: se vuelve a la normal.
+            let resets = [
+                PhoneCommand::MutePhone { on: false },
+                PhoneCommand::Quality {
+                    level: VideoQuality::Balanced,
+                },
+            ];
+            for command in resets {
+                if let Ok(task) = serde_json::to_string(&command) {
+                    let _ = shared.task_out.try_send(task);
+                }
             }
         }
     }

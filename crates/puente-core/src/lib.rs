@@ -12,7 +12,7 @@ pub mod transfers;
 pub mod wire;
 
 pub use engine::{Config, DesktopEvent, Engine, FileNote, Found, Problem, Status, View};
-pub use settings::LanguageChoice;
+pub use settings::{LanguageChoice, VideoQuality};
 pub use identity::{Fingerprint, Identity};
 pub use pairing::Role;
 pub use peers::{Peer, PeerStore};

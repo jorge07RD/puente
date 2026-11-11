@@ -115,6 +115,12 @@ internal object PhoneRuntime {
                     val on = task.getBoolean("on")
                     handler.post { PhoneSilence.setWanted(app, on) }
                 }
+                "quality" -> {
+                    val level = task.getString("level")
+                    handler.post {
+                        if (CaptureQuality.set(level)) MirrorService.instance?.restartEncoderIfNeeded()
+                    }
+                }
                 "stop_mirror" -> app.stopService(Intent(app, MirrorService::class.java))
                 "save_file" -> saveToDownloads(app, File(task.getString("path")), task.getString("name"))
             }

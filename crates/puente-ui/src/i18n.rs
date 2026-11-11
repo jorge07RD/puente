@@ -4,7 +4,7 @@
 
 use std::sync::atomic::{AtomicU8, Ordering};
 
-use puente_core::{FileNote, LanguageChoice, Problem};
+use puente_core::{FileNote, LanguageChoice, Problem, VideoQuality};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Language {
@@ -100,6 +100,16 @@ pub fn choice_label(choice: LanguageChoice) -> String {
     match choice {
         LanguageChoice::Auto => format!("Auto · {}", system_language().code().to_uppercase()),
         other => resolve(other).native_name().to_string(),
+    }
+}
+
+pub fn quality_label(quality: VideoQuality) -> &'static str {
+    let texts = t();
+    match quality {
+        VideoQuality::Auto => texts.quality_auto,
+        VideoQuality::Saver => texts.quality_saver,
+        VideoQuality::Balanced => texts.quality_balanced,
+        VideoQuality::High => texts.quality_high,
     }
 }
 
@@ -230,6 +240,21 @@ pub struct Texts {
     pub clipboard: &'static str,
     pub animations: &'static str,
     pub language: &'static str,
+    pub quality: &'static str,
+    pub quality_hint: &'static str,
+    pub quality_auto: &'static str,
+    pub quality_saver: &'static str,
+    pub quality_balanced: &'static str,
+    pub quality_high: &'static str,
+    /// Atajo de ratón de cada botón de navegación, en su ayuda.
+    pub mouse_back: &'static str,
+    pub mouse_home: &'static str,
+    pub mouse_recents: &'static str,
+
+    // Bandeja del sistema.
+    pub tray_show: &'static str,
+    pub tray_autostart: &'static str,
+    pub tray_quit: &'static str,
 
     // Móvil.
     pub sharing_tap_stop: &'static str,
@@ -357,6 +382,19 @@ static SPANISH: Texts = Texts {
     clipboard: "Portapapeles",
     animations: "Animaciones",
     language: "Idioma",
+    quality: "Calidad",
+    quality_hint: "Auto: 1920 px a 60 fps, con los datos que aguante la red. Ahorro: 1280 px a 30 fps. Normal: 1920 px a 60 fps. Alta: 2560 px a 60 fps, con el doble de datos",
+    quality_auto: "Auto",
+    quality_saver: "Ahorro",
+    quality_balanced: "Normal",
+    quality_high: "Alta",
+    mouse_back: "Clic derecho sobre la pantalla",
+    mouse_home: "Clic central sobre la pantalla",
+    mouse_recents: "Botón lateral de avance",
+
+    tray_show: "Mostrar Puente",
+    tray_autostart: "Iniciar con la sesión",
+    tray_quit: "Salir",
 
     sharing_tap_stop: "Compartiendo. Toca para detener",
     screen_stays_on: "La pantalla no se apagará mientras la PC esté conectada.",
@@ -483,6 +521,19 @@ static ENGLISH: Texts = Texts {
     clipboard: "Clipboard",
     animations: "Animations",
     language: "Language",
+    quality: "Quality",
+    quality_hint: "Auto: 1920 px at 60 fps, with as much data as the network handles. Saver: 1280 px at 30 fps. Normal: 1920 px at 60 fps. High: 2560 px at 60 fps, with twice the data",
+    quality_auto: "Auto",
+    quality_saver: "Saver",
+    quality_balanced: "Normal",
+    quality_high: "High",
+    mouse_back: "Right click on the screen",
+    mouse_home: "Middle click on the screen",
+    mouse_recents: "Forward side button",
+
+    tray_show: "Show Puente",
+    tray_autostart: "Start with the session",
+    tray_quit: "Quit",
 
     sharing_tap_stop: "Sharing. Tap to stop",
     screen_stays_on: "The screen will stay on while the PC is connected.",
@@ -609,6 +660,19 @@ static PORTUGUESE: Texts = Texts {
     clipboard: "Área de transferência",
     animations: "Animações",
     language: "Idioma",
+    quality: "Qualidade",
+    quality_hint: "Auto: 1920 px a 60 fps, com os dados que a rede aguentar. Economia: 1280 px a 30 fps. Normal: 1920 px a 60 fps. Alta: 2560 px a 60 fps, com o dobro de dados",
+    quality_auto: "Auto",
+    quality_saver: "Economia",
+    quality_balanced: "Normal",
+    quality_high: "Alta",
+    mouse_back: "Clique direito na tela",
+    mouse_home: "Clique do meio na tela",
+    mouse_recents: "Botão lateral de avançar",
+
+    tray_show: "Mostrar o Puente",
+    tray_autostart: "Iniciar com a sessão",
+    tray_quit: "Sair",
 
     sharing_tap_stop: "Compartilhando. Toque para parar",
     screen_stays_on: "A tela não vai apagar enquanto o PC estiver conectado.",

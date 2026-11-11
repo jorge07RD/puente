@@ -1,10 +1,15 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 mod audio;
+#[cfg(target_os = "linux")]
+mod autostart;
 mod decoder;
 #[cfg(unix)]
 mod handoff;
 mod integration;
+#[cfg(target_os = "linux")]
+mod tray;
+mod window;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -14,6 +19,8 @@ use puente_core::settings::SettingsFile;
 use puente_core::{Config, Engine, Role};
 use puente_ui::i18n::{self, t};
 use puente_ui::{Demo, DemoKind, Gallery, PuenteApp};
+
+use crate::window::{Shell, WindowControl};
 
 fn data_dir() -> PathBuf {
     dirs::config_dir()
@@ -29,7 +36,7 @@ fn device_name() -> String {
         .unwrap_or_else(|| "PC".to_string())
 }
 
-fn build_app(context: egui::Context) -> PuenteApp {
+fn build_app(context: egui::Context, window: Arc<WindowControl>) -> PuenteApp {
     let mut config = Config::new(Role::Desktop, data_dir(), device_name());
     if let Some(downloads) = dirs::download_dir() {
         config.downloads_dir = downloads;
@@ -42,7 +49,7 @@ fn build_app(context: egui::Context) -> PuenteApp {
     };
     let screen = decoder::start(engine.clone(), context);
     let audio = audio::start(&engine);
-    let integration = integration::start(engine.clone(), audio);
+    let integration = integration::start(engine.clone(), audio, window);
     PuenteApp::new(&repaint_context, Role::Desktop, Ok(engine))
         .with_screen(Box::new(screen))
         .with_desktop_actions(Box::new(integration))
@@ -116,12 +123,33 @@ fn set_up_language(arguments: &[String]) {
     i18n::apply(settings.current.language);
 }
 
+/// Solo puede haber una ventana: el puerto 1714 no se comparte. Abrir Puente otra vez
+/// muestra la que ya existe; al iniciar la sesión, si ya hay una, no se hace nada.
+#[cfg(unix)]
+fn hand_over_to_running_window(hidden: bool) {
+    let running = if hidden { handoff::is_running() } else { handoff::show_existing() };
+    if running {
+        std::process::exit(0);
+    }
+}
+
+/// La bandeja y su forma de rehacer el menú; sin bandeja, cerrar sale de la app.
+fn start_tray(window: &Arc<WindowControl>) -> Box<dyn Fn()> {
+    #[cfg(target_os = "linux")]
+    if let Some(icon) = tray::start(window.clone()) {
+        return Box::new(move || icon.refresh());
+    }
+    let _ = window;
+    Box::new(|| {})
+}
+
 fn main() -> eframe::Result {
     let arguments: Vec<String> = std::env::args().collect();
     set_up_language(&arguments);
     if let Some(at) = arguments.iter().position(|argument| argument == "--send") {
         send_and_exit(&arguments[at + 1..]);
     }
+    let hidden = arguments.iter().any(|argument| argument == "--hidden");
     let options = eframe::NativeOptions {
         #[cfg(target_os = "linux")]
         event_loop_builder: linux_event_loop(),
@@ -155,10 +183,18 @@ fn main() -> eframe::Result {
             Box::new(|creation| Ok(Box::new(Gallery::new(&creation.egui_ctx)))),
         );
     }
+    #[cfg(unix)]
+    hand_over_to_running_window(hidden);
+    let window = Arc::new(WindowControl::default());
+    let refresh_tray = start_tray(&window);
     eframe::run_native(
         "Puente",
         options,
-        Box::new(|creation| Ok(Box::new(build_app(creation.egui_ctx.clone())))),
+        Box::new(move |creation| {
+            let context = creation.egui_ctx.clone();
+            let app = build_app(context.clone(), window.clone());
+            Ok(Box::new(Shell::new(&context, app, window, hidden, refresh_tray)))
+        }),
     )
 }
 
