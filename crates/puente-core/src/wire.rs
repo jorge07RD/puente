@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
+use crate::settings::VideoQuality;
 use crate::{Error, Fingerprint, Result};
 
 /// Límite durante el saludo, cuando el otro lado aún no está autenticado.
@@ -141,6 +142,8 @@ pub enum PhoneCommand {
     CallAction { key: String, answer: bool },
     /// Callar la música en el móvil porque ya suena en la PC.
     MutePhone { on: bool },
+    /// Cambiar la calidad del vídeo; el móvil reinicia el codificador.
+    Quality { level: VideoQuality },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]

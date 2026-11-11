@@ -31,7 +31,12 @@ import kotlin.math.roundToInt
 
 /** Mantiene viva la captura de pantalla mientras se comparte. */
 class MirrorService : Service() {
-    private data class CaptureSize(val width: Int, val height: Int, val dpi: Int)
+    private data class CaptureSize(
+        val width: Int,
+        val height: Int,
+        val dpi: Int,
+        val quality: CaptureQuality.Level,
+    )
 
     private val handler = Handler(Looper.getMainLooper())
     private var projection: MediaProjection? = null
@@ -104,7 +109,7 @@ class MirrorService : Service() {
         projection = granted
 
         val capture = currentSize()
-        val started = Encoder(capture.width, capture.height)
+        val started = Encoder(capture.width, capture.height, capture.quality)
         encoder = started
         size = capture
         display = granted.createVirtualDisplay(
@@ -118,6 +123,7 @@ class MirrorService : Service() {
             null,
         )
         running = true
+        instance = this
         Native.onMirrorState(true)
         startAudio(granted)
         keepScreenOn()
@@ -153,13 +159,18 @@ class MirrorService : Service() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        restartEncoderIfNeeded()
+    }
+
+    /** Al girar o al cambiar la calidad hace falta un codificador con otro formato. */
+    fun restartEncoderIfNeeded() {
         val current = display ?: return
         val capture = currentSize()
         if (capture == size) return
 
         current.surface = null
         encoder?.stop()
-        val replaced = Encoder(capture.width, capture.height)
+        val replaced = Encoder(capture.width, capture.height, capture.quality)
         encoder = replaced
         size = capture
         current.resize(capture.width, capture.height, capture.dpi)
@@ -175,6 +186,7 @@ class MirrorService : Service() {
 
     override fun onDestroy() {
         running = false
+        instance = null
         releaseScreen()
         Native.onMirrorState(false)
         PhoneSilence.setCapturing(this, false)
@@ -196,9 +208,15 @@ class MirrorService : Service() {
         getSystemService(DisplayManager::class.java)
             .getDisplay(Display.DEFAULT_DISPLAY)
             .getRealMetrics(metrics)
+        val quality = CaptureQuality.current
         val longest = max(metrics.widthPixels, metrics.heightPixels)
-        val scale = min(1.0, MAX_DIMENSION.toDouble() / longest)
-        return CaptureSize(even(metrics.widthPixels * scale), even(metrics.heightPixels * scale), metrics.densityDpi)
+        val scale = min(1.0, quality.maxDimension.toDouble() / longest)
+        return CaptureSize(
+            even(metrics.widthPixels * scale),
+            even(metrics.heightPixels * scale),
+            metrics.densityDpi,
+            quality,
+        )
     }
 
     private fun even(value: Double) = (value / 2).roundToInt() * 2
@@ -241,13 +259,16 @@ class MirrorService : Service() {
         var running = false
             private set
 
+        /** El servicio en marcha, para cambiarle la calidad desde fuera. Solo en el hilo principal. */
+        var instance: MirrorService? = null
+            private set
+
         private const val TAG = "puente"
         private const val ACTION_STOP = "dev.puente.app.STOP"
         private const val EXTRA_RESULT_CODE = "result_code"
         private const val EXTRA_DATA = "data"
         private const val CHANNEL_ID = "mirror"
         private const val NOTIFICATION_ID = 1
-        private const val MAX_DIMENSION = 1920
         private const val SCREEN_CHECK_MILLISECONDS = 3000L
 
         fun startIntent(context: Context, resultCode: Int, data: Intent): Intent =

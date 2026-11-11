@@ -141,46 +141,42 @@ pub fn paint_ring(painter: &Painter, center: Pos2, radius: f32, dots: usize, fra
 }
 
 const CHARGE_TRAIL: f32 = 8.0;
-const CHARGE_SPILL_DOTS: usize = 3;
-/// Parte del ciclo que tarda la estela en llegar a la punta.
+/// Parte del ciclo que tarda la estela en llegar a la punta; el resto es pausa.
 const CHARGE_SWEEP: f32 = 0.72;
 
 /// Cuánto verde lleva un punto del anillo de carga, de 0 a 1. `lit` son los puntos
-/// encendidos; `phase` recorre el ciclo, o es `None` si no hay animaciones.
-fn charge_glow(index: usize, lit: usize, phase: Option<f32>) -> f32 {
-    if index + 1 == lit {
+/// encendidos de `dots`; `phase` recorre el ciclo, o es `None` si no hay animaciones.
+/// La estela nunca pasa de la punta, y con la carga completa todo el anillo es verde.
+fn charge_glow(index: usize, lit: usize, dots: usize, phase: Option<f32>) -> f32 {
+    if index >= lit {
+        return 0.0;
+    }
+    if lit >= dots || index + 1 == lit {
         return 1.0;
     }
-    let Some(phase) = phase else {
+    let Some(phase) = phase.filter(|phase| *phase < CHARGE_SWEEP) else {
         return 0.0;
     };
-    if index < lit {
-        // La estela avanza desde el inicio del anillo hasta la punta.
-        let comet = ease_out(stage(phase, 0.0, CHARGE_SWEEP)) * (lit.max(1) - 1) as f32;
-        let behind = comet - index as f32;
-        if phase < CHARGE_SWEEP && (0.0..CHARGE_TRAIL).contains(&behind) {
-            return 1.0 - behind / CHARGE_TRAIL;
-        }
-        return 0.0;
+    // La estela avanza desde el inicio del anillo hasta la punta.
+    let comet = ease_out(stage(phase, 0.0, CHARGE_SWEEP)) * (lit - 1) as f32;
+    let behind = comet - index as f32;
+    if (0.0..CHARGE_TRAIL).contains(&behind) {
+        1.0 - behind / CHARGE_TRAIL
+    } else {
+        0.0
     }
-    // Al llegar, se encienden un momento los siguientes puntos apagados.
-    let offset = index - lit;
-    if offset >= CHARGE_SPILL_DOTS || phase < CHARGE_SWEEP {
-        return 0.0;
-    }
-    let front = stage(phase, CHARGE_SWEEP, 1.0) * CHARGE_SPILL_DOTS as f32;
-    (1.0 - (front - offset as f32 - 0.5).abs()).clamp(0.0, 1.0)
 }
 
 /// Anillo mientras el móvil carga: como [`paint_ring`], con la punta verde y una
-/// estela que la recorre. Con `phase` en `None` queda quieto.
+/// estela que llega hasta ella. Al 100 % todos los puntos quedan verdes. Con
+/// `phase` en `None` queda quieto.
 pub fn paint_charging_ring(painter: &Painter, center: Pos2, radius: f32, dots: usize, fraction: f32, phase: Option<f32>) {
     let lit = (fraction.clamp(0.0, 1.0) * dots as f32).round().max(1.0) as usize;
     let size = TAU * radius / dots as f32 * DOT_RADIUS_RATIO;
     for index in 0..dots {
         let angle = index as f32 / dots as f32 * TAU - FRAC_PI_2;
         let position = center + vec2(angle.cos(), angle.sin()) * radius;
-        let glow = charge_glow(index, lit, phase);
+        let glow = charge_glow(index, lit, dots, phase);
         let base = if index < lit { INK } else { DOT_OFF };
         let base_size = if index < lit { size } else { size * 0.7 };
         painter.circle_filled(position, base_size * (1.0 + glow * 0.3), mix(base, LOADING, glow));
@@ -496,21 +492,38 @@ mod tests {
     #[test]
     fn the_charging_tip_stays_green_and_the_comet_travels_towards_it() {
         const LIT: usize = 40;
-        assert_eq!(charge_glow(LIT - 1, LIT, None), 1.0);
-        assert_eq!(charge_glow(10, LIT, None), 0.0);
-        assert_eq!(charge_glow(LIT - 1, LIT, Some(0.3)), 1.0);
+        const DOTS: usize = 54;
+        assert_eq!(charge_glow(LIT - 1, LIT, DOTS, None), 1.0);
+        assert_eq!(charge_glow(10, LIT, DOTS, None), 0.0);
+        assert_eq!(charge_glow(LIT - 1, LIT, DOTS, Some(0.3)), 1.0);
 
         // La estela empieza al principio del anillo.
-        assert!(charge_glow(0, LIT, Some(0.0)) > 0.9);
-        assert_eq!(charge_glow(30, LIT, Some(0.0)), 0.0);
+        assert!(charge_glow(0, LIT, DOTS, Some(0.0)) > 0.9);
+        assert_eq!(charge_glow(30, LIT, DOTS, Some(0.0)), 0.0);
     }
 
     #[test]
-    fn charge_spills_into_the_next_dark_dots_only_at_the_end() {
+    fn the_charge_never_goes_past_the_tip() {
         const LIT: usize = 40;
-        assert_eq!(charge_glow(LIT, LIT, Some(0.5)), 0.0);
-        assert!(charge_glow(LIT, LIT, Some(0.76)) > 0.0);
-        assert_eq!(charge_glow(LIT + CHARGE_SPILL_DOTS, LIT, Some(0.9)), 0.0);
+        const DOTS: usize = 54;
+        for step in 0..=100 {
+            let phase = Some(step as f32 / 100.0);
+            for index in LIT..DOTS {
+                assert_eq!(charge_glow(index, LIT, DOTS, phase), 0.0, "punto {index} en {phase:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_full_charge_turns_every_dot_green() {
+        const DOTS: usize = 54;
+        for phase in [None, Some(0.0), Some(0.5), Some(0.9)] {
+            for index in 0..DOTS {
+                assert_eq!(charge_glow(index, DOTS, DOTS, phase), 1.0);
+            }
+        }
+        // A un punto de llenarse todavía no.
+        assert_eq!(charge_glow(10, DOTS - 1, DOTS, None), 0.0);
     }
 
     #[test]

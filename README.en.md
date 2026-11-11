@@ -56,9 +56,10 @@ On Linux, keeping your phone at hand usually takes two tools: **KDE Connect** fo
 
 | | Feature | Details |
 |---|---|---|
-| **Screen** | See and control the phone | Mouse, wheel and keyboard; back, home and recents; follows the phone when it rotates |
+| **Screen** | See and control the phone | Mouse, wheel and keyboard; back, home and recents, also with right click, middle click and the side buttons; follows the phone when it rotates |
+| **Quality** | Automatic or fixed | Auto fits the data to what the network handles without cutting the picture; also Saver, Normal and High |
 | **Sound** | Hear the phone on the PC | With a switch to turn it off, and another to mute the phone while streaming |
-| **Notifications** | On your desktop | Dismiss them and, if the app allows it, reply from the PC |
+| **Notifications** | On your desktop | Dismiss them one by one or all at once and, if the app allows it, reply from the PC |
 | **Calls** | See who is calling | Alert on the PC, also for calls from other apps. Answering from the PC does not work with WhatsApp yet |
 | **Files** | Send both ways | By dragging onto the window, with progress and confirmation that they were saved |
 | **Clipboard** | Copy and paste between devices | Automatic from the PC to the phone |
@@ -66,10 +67,13 @@ On Linux, keeping your phone at hand usually takes two tools: **KDE Connect** fo
 | **Battery** | Level and charging | Animated ring of dots while charging |
 | **Find** | Make the phone ring | Rings like an alarm for 30 seconds |
 | **Languages** | Spanish, English and Portuguese | Follows the system language or the one you pick in Settings |
+| **Tray** | Always at hand | Closing the window keeps Puente connected in the tray; it can start on its own when you log in |
 
 While you share the screen with a connected PC, the phone does not turn off or lock (it needs **Control from the PC** turned on), and you can stop the stream from either side. Press `F2` or the button in the bar to hide the cards and keep only the stream.
 
-On Linux you can also send files from the terminal to the open window:
+On Linux, closing the window leaves Puente in the system tray, connected to the phone. From its menu you can open it again, tick **Start with the session** or quit. If your bar does not show tray icons, closing the window quits the app as before.
+
+You can also send files from the terminal to the open window:
 
 ```bash
 puente --send photo.jpg document.pdf

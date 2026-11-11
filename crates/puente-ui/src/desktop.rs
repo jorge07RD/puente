@@ -18,6 +18,7 @@ use crate::motion::{self, LinkMotion};
 use crate::icons::{self, Icon};
 use crate::parts::{
     self, card_full, displayable, dot_figure, icon_button, icon_button_at, label, pill, pill_button, stat, switch_row,
+    value_row,
 };
 use crate::theme::{ACCENT, EDGE, GAP, INK, INK_SOFT, LOADING, PADDING, TEXT_LABEL};
 
@@ -671,11 +672,12 @@ fn draw_screen(ui: &mut egui::Ui, stage: Rect, texture: &TextureHandle) -> Optio
 fn draw_navigation(ui: &mut egui::Ui, engine: &Engine) {
     ui.spacing_mut().item_spacing.x = 28.0;
     let buttons = [
-        (Icon::Back, NavAction::Back, t().back),
-        (Icon::Home, NavAction::Home, t().home),
-        (Icon::Recents, NavAction::Recents, t().recents),
+        (Icon::Back, NavAction::Back, t().back, t().mouse_back),
+        (Icon::Home, NavAction::Home, t().home, t().mouse_home),
+        (Icon::Recents, NavAction::Recents, t().recents, t().mouse_recents),
     ];
-    for (icon, action, hint) in buttons {
+    for (icon, action, hint, shortcut) in buttons {
+        let hint = format!("{hint}\n{shortcut}");
         if icon_button(ui, icon, 44.0, false).on_hover_text(hint).clicked() {
             engine.send_input(Input::Navigate { action });
         }
@@ -690,12 +692,13 @@ fn link_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame, name: &str) {
     const STATS_HEIGHT: f32 = 46.0;
     const NAME_MIN_HEIGHT: f32 = 130.0;
     const HINT_MIN_HEIGHT: f32 = 20.0;
+    const QUALITY_HEIGHT: f32 = 30.0;
     let view = frame.view;
 
     card_full(ui, rect, "01", t().card_link, true, "", |ui| {
         // En tarjetas bajas el nombre cede su sitio para que las cifras quepan enteras.
         let show_name = ui.available_height() >= NAME_MIN_HEIGHT;
-        let reserved = STATS_HEIGHT + if show_name { 30.0 } else { 8.0 };
+        let reserved = STATS_HEIGHT + QUALITY_HEIGHT + 6.0 + if show_name { 30.0 } else { 8.0 };
         let bridge_height = (ui.available_height() - reserved).clamp(26.0, 110.0);
         let (bridge, _) = ui.allocate_exact_size(vec2(ui.available_width(), bridge_height), Sense::hover());
         dots::paint_bridge(ui.painter(), bridge, frame.bridge);
@@ -719,6 +722,13 @@ fn link_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame, name: &str) {
                 stat(&mut columns[1], "mbps", &optional(mbps));
             });
         });
+        ui.add_space(6.0);
+        if value_row(ui, t().quality, i18n::quality_label(view.quality), QUALITY_HEIGHT)
+            .on_hover_text(t().quality_hint)
+            .clicked()
+        {
+            frame.engine.set_quality(view.quality.next());
+        }
         if !view.mirroring && ui.available_height() >= HINT_MIN_HEIGHT {
             ui.add_space(6.0);
             label(ui, t().share_from_phone);
@@ -1237,6 +1247,16 @@ fn wheel_lines(unit: egui::MouseWheelUnit, delta: f32) -> f32 {
     }
 }
 
+/// Los mismos atajos que scrcpy, para quien ya los conoce.
+fn mouse_shortcut(button: egui::PointerButton) -> Option<NavAction> {
+    match button {
+        egui::PointerButton::Secondary | egui::PointerButton::Extra1 => Some(NavAction::Back),
+        egui::PointerButton::Middle => Some(NavAction::Home),
+        egui::PointerButton::Extra2 => Some(NavAction::Recents),
+        egui::PointerButton::Primary => None,
+    }
+}
+
 fn forward_input(ui: &egui::Ui, screen: Rect, frame: &Frame, touching: &mut bool) {
     let engine = frame.engine;
     let (events, hover) = ui.input(|input| (input.events.clone(), input.pointer.hover_pos()));
@@ -1262,6 +1282,16 @@ fn forward_input(ui: &egui::Ui, screen: Rect, frame: &Frame, touching: &mut bool
                 } else if !pressed && *touching {
                     *touching = false;
                     touch(TouchPhase::Up, pos);
+                }
+            }
+            Event::PointerButton {
+                pos,
+                button,
+                pressed: true,
+                ..
+            } if screen.contains(pos) && !covered(pos) => {
+                if let Some(action) = mouse_shortcut(button) {
+                    engine.send_input(Input::Navigate { action });
                 }
             }
             Event::PointerMoved(position) if *touching => touch(TouchPhase::Move, position),

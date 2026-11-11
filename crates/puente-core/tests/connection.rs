@@ -13,7 +13,7 @@ use puente_core::wire::{
     read_message, write_message,
 };
 use puente_core::DesktopEvent;
-use puente_core::{Config, Engine, Error, Identity, PeerStore, Role, Status, View};
+use puente_core::{Config, Engine, Error, Identity, PeerStore, Role, Status, VideoQuality, View};
 use tokio::sync::oneshot;
 
 fn free_port() -> u16 {
@@ -224,16 +224,16 @@ fn desktop_commands_and_clipboard_become_phone_tasks() {
     desktop.send_command(PhoneCommand::Media {
         action: MediaAction::Next,
     });
-    let task: serde_json::Value = serde_json::from_str(&phone.next_task(wait).unwrap()).unwrap();
+    let task = next_task_besides_quality(&phone, wait);
     assert_eq!(task["command"], "media");
     assert_eq!(task["action"], "next");
 
     desktop.send_command(PhoneCommand::StopMirror);
-    let task: serde_json::Value = serde_json::from_str(&phone.next_task(wait).unwrap()).unwrap();
+    let task = next_task_besides_quality(&phone, wait);
     assert_eq!(task["command"], "stop_mirror");
 
     desktop.send_clipboard("secreto".to_string());
-    let task: serde_json::Value = serde_json::from_str(&phone.next_task(wait).unwrap()).unwrap();
+    let task = next_task_besides_quality(&phone, wait);
     assert_eq!(task["command"], "set_clipboard");
     assert_eq!(task["text"], "secreto");
 }
@@ -362,6 +362,16 @@ fn the_audio_choice_survives_a_restart() {
     assert!(!second.audio_enabled());
 }
 
+/// La PC pide su calidad al conectar; las pruebas de otras órdenes la saltan.
+fn next_task_besides_quality(phone: &Engine, wait: Duration) -> serde_json::Value {
+    loop {
+        let task: serde_json::Value = serde_json::from_str(&phone.next_task(wait).unwrap()).unwrap();
+        if task["command"] != "quality" {
+            return task;
+        }
+    }
+}
+
 #[test]
 fn the_phone_stays_quiet_only_while_the_desktop_can_be_heard() {
     let desktop_dir = tempfile::tempdir().unwrap();
@@ -373,7 +383,7 @@ fn the_phone_stays_quiet_only_while_the_desktop_can_be_heard() {
     pair(&desktop, &phone);
     let wait = Duration::from_secs(5);
     let next_mute = || {
-        let task: serde_json::Value = serde_json::from_str(&phone.next_task(wait).unwrap()).unwrap();
+        let task = next_task_besides_quality(&phone, wait);
         assert_eq!(task["command"], "mute_phone");
         task["on"].as_bool().unwrap()
     };
@@ -386,6 +396,45 @@ fn the_phone_stays_quiet_only_while_the_desktop_can_be_heard() {
 
     drop(desktop);
     assert!(!next_mute(), "al cortarse la conexión el móvil recupera el sonido");
+}
+
+#[test]
+fn the_phone_hears_the_chosen_quality_and_forgets_it_when_the_desktop_leaves() {
+    let desktop_dir = tempfile::tempdir().unwrap();
+    let phone_dir = tempfile::tempdir().unwrap();
+    let port = free_port();
+    let desktop = engine(Role::Desktop, desktop_dir.path(), port);
+    desktop.set_quality(VideoQuality::High);
+    let phone = engine(Role::Phone, phone_dir.path(), port);
+    pair(&desktop, &phone);
+    let wait = Duration::from_secs(5);
+    let next_quality = || loop {
+        let task: serde_json::Value = serde_json::from_str(&phone.next_task(wait).unwrap()).unwrap();
+        if task["command"] == "quality" {
+            return task["level"].as_str().unwrap().to_string();
+        }
+    };
+
+    assert_eq!(next_quality(), "high", "la preferencia se aplica al conectar");
+    desktop.set_quality(VideoQuality::Saver);
+    assert_eq!(next_quality(), "saver");
+    assert_eq!(desktop.view().quality, VideoQuality::Saver);
+
+    drop(desktop);
+    assert_eq!(next_quality(), "balanced", "otra PC empieza con la calidad normal");
+}
+
+#[test]
+fn a_new_desktop_asks_for_automatic_quality() {
+    let desktop_dir = tempfile::tempdir().unwrap();
+    let phone_dir = tempfile::tempdir().unwrap();
+    let port = free_port();
+    let desktop = engine(Role::Desktop, desktop_dir.path(), port);
+    let phone = engine(Role::Phone, phone_dir.path(), port);
+    pair(&desktop, &phone);
+    let task: serde_json::Value = serde_json::from_str(&phone.next_task(Duration::from_secs(5)).unwrap()).unwrap();
+    assert_eq!(task["command"], "quality");
+    assert_eq!(task["level"], "auto");
 }
 
 fn sample_call() -> CallInfo {
@@ -452,7 +501,7 @@ fn desktop_answers_become_phone_tasks() {
         key: "k".to_string(),
         text: "Voy".to_string(),
     });
-    let task: serde_json::Value = serde_json::from_str(&phone.next_task(wait).unwrap()).unwrap();
+    let task = next_task_besides_quality(&phone, wait);
     assert_eq!(task["command"], "reply");
     assert_eq!(task["key"], "k");
     assert_eq!(task["text"], "Voy");
@@ -461,7 +510,7 @@ fn desktop_answers_become_phone_tasks() {
         key: "llamada".to_string(),
         answer: false,
     });
-    let task: serde_json::Value = serde_json::from_str(&phone.next_task(wait).unwrap()).unwrap();
+    let task = next_task_besides_quality(&phone, wait);
     assert_eq!(task["command"], "call_action");
     assert_eq!(task["answer"], false);
 
