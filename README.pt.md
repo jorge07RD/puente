@@ -56,9 +56,10 @@ No Linux, ter o celular à mão costuma exigir duas ferramentas: o **KDE Connect
 
 | | Função | Detalhe |
 |---|---|---|
-| **Tela** | Ver e controlar o celular | Mouse, roda e teclado; voltar, início e recentes; acompanha o celular quando ele gira |
+| **Tela** | Ver e controlar o celular | Mouse, roda e teclado; voltar, início e recentes, também com clique direito, clique do meio e os botões laterais; acompanha o celular quando ele gira |
+| **Qualidade** | Automática ou fixa | Auto ajusta os dados ao que a rede aguenta sem cortar a imagem; também Economia, Normal e Alta |
 | **Som** | Ouvir o celular no PC | Com um botão para desativar, e outro para silenciar o celular durante a transmissão |
-| **Notificações** | Na área de trabalho | Dá para dispensá-las e, se o app permitir, responder pelo PC |
+| **Notificações** | Na área de trabalho | Dá para dispensá-las uma a uma ou todas de uma vez e, se o app permitir, responder pelo PC |
 | **Chamadas** | Ver quem está ligando | Aviso no PC, também para chamadas de outros apps. Atender pelo PC ainda não funciona no WhatsApp |
 | **Arquivos** | Enviar nos dois sentidos | Arrastando para a janela, com progresso e confirmação de que foram salvos |
 | **Área de transferência** | Copiar e colar entre dispositivos | Automática do PC para o celular |
@@ -66,10 +67,13 @@ No Linux, ter o celular à mão costuma exigir duas ferramentas: o **KDE Connect
 | **Bateria** | Nível e carga | Anel de pontos animado enquanto carrega |
 | **Achar** | Fazer o celular tocar | Toca como alarme por 30 segundos |
 | **Idiomas** | Espanhol, inglês e português | Segue o idioma do sistema ou o que você escolher em Ajustes |
+| **Bandeja** | Sempre à mão | Ao fechar a janela, o Puente continua conectado na bandeja; pode iniciar sozinho com a sessão |
 
 Enquanto você compartilha a tela com um PC conectado, o celular não apaga nem bloqueia (precisa de **Controle pelo PC** ativado), e dá para parar a transmissão de qualquer um dos lados. Com `F2` ou o botão da barra você oculta os cartões e deixa só a transmissão.
 
-No Linux você também pode enviar arquivos pelo terminal para a janela aberta:
+No Linux, fechar a janela deixa o Puente na bandeja do sistema, conectado ao celular. Pelo menu dele você pode abri-lo de novo, marcar **Iniciar com a sessão** ou sair. Se a sua barra não mostra ícones de bandeja, fechar a janela fecha o app como antes.
+
+Você também pode enviar arquivos pelo terminal para a janela aberta:
 
 ```bash
 puente --send foto.jpg documento.pdf

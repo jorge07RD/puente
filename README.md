@@ -56,9 +56,10 @@ En Linux, tener el móvil a mano suele exigir dos herramientas: **KDE Connect** 
 
 | | Función | Detalle |
 |---|---|---|
-| **Pantalla** | Ver y controlar el móvil | Ratón, rueda y teclado; atrás, inicio y recientes; se adapta al girar el móvil |
+| **Pantalla** | Ver y controlar el móvil | Ratón, rueda y teclado; atrás, inicio y recientes, también con clic derecho, clic central y los botones laterales; se adapta al girar el móvil |
+| **Calidad** | Automática o fija | Auto ajusta los datos a lo que aguanta la red sin cortar la imagen; también Ahorro, Normal y Alta |
 | **Sonido** | Oír el móvil en la PC | Con interruptor para desactivarlo, y otro para silenciar el móvil mientras transmites |
-| **Avisos** | Notificaciones en el escritorio | Se pueden descartar y, si la app lo admite, responder desde la PC |
+| **Avisos** | Notificaciones en el escritorio | Se pueden descartar de una en una o todas a la vez y, si la app lo admite, responder desde la PC |
 | **Llamadas** | Ver quién llama | Aviso en la PC, también para llamadas de otras apps. Contestar desde la PC todavía no funciona en WhatsApp |
 | **Archivos** | Enviar en los dos sentidos | Arrastrando a la ventana, con progreso y confirmación de que se guardaron |
 | **Portapapeles** | Copiar y pegar entre dispositivos | Automático de la PC al móvil |
@@ -66,10 +67,13 @@ En Linux, tener el móvil a mano suele exigir dos herramientas: **KDE Connect** 
 | **Batería** | Nivel y carga | Anillo de puntos animado mientras carga |
 | **Buscar** | Hacer sonar el móvil | Suena como alarma durante 30 segundos |
 | **Idiomas** | Español, inglés y portugués | Sigue el idioma del sistema o el que elijas en Ajustes |
+| **Bandeja** | Siempre a mano | Al cerrar la ventana, Puente sigue conectado en la bandeja; puede arrancar solo al iniciar la sesión |
 
 Mientras compartes la pantalla con una PC conectada, el móvil no se apaga ni se bloquea (necesita **Control desde la PC** activado), y puedes cortar la transmisión desde cualquiera de los dos lados. Con `F2` o el botón de la barra ocultas las tarjetas para dejar solo la transmisión.
 
-En Linux también puedes enviar archivos desde la terminal a la ventana abierta:
+En Linux, cerrar la ventana deja a Puente en la bandeja del sistema, conectado al móvil. Desde su menú puedes volver a abrirlo, marcar **Iniciar con la sesión** o salir. Si tu barra no muestra iconos de bandeja, cerrar la ventana cierra la app como siempre.
+
+También puedes enviar archivos desde la terminal a la ventana abierta:
 
 ```bash
 puente --send foto.jpg documento.pdf
