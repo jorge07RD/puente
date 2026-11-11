@@ -922,9 +922,7 @@ fn notices_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame, state: &mut Deskto
         state.reply = None;
     }
 
-    let count = if notices.is_empty() { String::new() } else { notices.len().to_string() };
-
-    card_full(ui, rect, "06", t().card_notices, !notices.is_empty(), &count, |ui| {
+    card_full(ui, rect, "06", t().card_notices, !notices.is_empty(), "", |ui| {
         if notices.is_empty() {
             label(ui, t().no_notices);
             return;
@@ -938,6 +936,34 @@ fn notices_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame, state: &mut Deskto
                     ui.add_space(4.0);
                 }
             });
+    });
+    if !notices.is_empty() {
+        dismiss_all_control(ui, rect, frame);
+    }
+}
+
+/// Borra en el móvil todos los avisos de la lista, con el contador a su lado.
+fn dismiss_all_control(ui: &mut egui::Ui, card: Rect, frame: &Frame) {
+    /// Por debajo de este ancho, el texto chocaría con el título de la tarjeta.
+    const TEXT_MIN_WIDTH: f32 = 300.0;
+
+    let notices = &frame.view.notifications;
+    in_card_header(ui, card, |ui| {
+        let pressed = if card.width() >= TEXT_MIN_WIDTH {
+            pill(ui, t().dismiss_all, HEADER_HEIGHT, false).clicked()
+        } else {
+            icon_button(ui, Icon::Close, HEADER_HEIGHT, false)
+                .on_hover_text(t().dismiss_all)
+                .clicked()
+        };
+        if pressed {
+            for info in notices {
+                frame.engine.send_command(PhoneCommand::Dismiss {
+                    key: info.key.clone(),
+                });
+            }
+        }
+        label(ui, &notices.len().to_string());
     });
 }
 
