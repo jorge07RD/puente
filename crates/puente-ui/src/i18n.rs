@@ -206,6 +206,7 @@ pub struct Texts {
     pub reply_sent: &'static str,
     pub reply_failed: &'static str,
     pub dismiss: &'static str,
+    pub dismiss_all: &'static str,
 
     // Buscar móvil.
     pub stop_ring: &'static str,
@@ -335,6 +336,7 @@ static SPANISH: Texts = Texts {
     reply_sent: "Respuesta enviada",
     reply_failed: "No se pudo enviar",
     dismiss: "Descartar",
+    dismiss_all: "Borrar todo",
 
     stop_ring: "Parar",
     ring_phone: "Hacer sonar el móvil",
@@ -460,6 +462,7 @@ static ENGLISH: Texts = Texts {
     reply_sent: "Reply sent",
     reply_failed: "Could not send",
     dismiss: "Dismiss",
+    dismiss_all: "Clear all",
 
     stop_ring: "Stop",
     ring_phone: "Make the phone ring",
@@ -585,6 +588,7 @@ static PORTUGUESE: Texts = Texts {
     reply_sent: "Resposta enviada",
     reply_failed: "Não foi possível enviar",
     dismiss: "Dispensar",
+    dismiss_all: "Limpar tudo",
 
     stop_ring: "Parar",
     ring_phone: "Fazer o celular tocar",
