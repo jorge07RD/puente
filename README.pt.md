@@ -121,7 +121,7 @@ A versão para Windows compila e passa nos testes automáticos, mas ainda não f
 |---|---|
 | **PC** | Linux. Testado no Hyprland com XWayland |
 | **Celular** | Android 10 ou superior, arm64. Testado em um Samsung Galaxy S23 Ultra |
-| **Rede** | Os dois na mesma rede local, com a porta 1714 TCP e UDP aberta no PC. Se o PC não aparecer sozinho (Wi-Fi de convidados, VPN, outra sub-rede), toque em «Digitar IP» no celular e coloque o que o Puente mostra no PC |
+| **Rede** | Os dois na mesma rede local, com a porta 1714 TCP e UDP aberta no PC. Se o PC não aparecer sozinho (Wi-Fi de convidados, VPN, outra sub-rede), toque em «Escanear QR» no celular e aponte para o código que o Puente mostra no PC, ou em «Digitar IP» para digitá-lo |
 
 Se você usa `ufw`:
 

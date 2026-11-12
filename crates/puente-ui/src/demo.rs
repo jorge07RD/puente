@@ -166,6 +166,8 @@ impl PhoneActions for SamplePhone {
 
     fn open_battery_settings(&self) {}
 
+    fn scan_code(&self) {}
+
     fn battery_unrestricted(&self) -> bool {
         true
     }

@@ -21,7 +21,7 @@ use crate::parts::{
     self, card_full, displayable, dot_figure, icon_button, icon_button_at, label, pill, pill_button, stat, switch_row,
     value_row,
 };
-use crate::theme::{ACCENT, EDGE, GAP, INK, INK_SOFT, LOADING, PADDING, TEXT_LABEL};
+use crate::theme::{ACCENT, EDGE, GAP, GROUND, INK, INK_SOFT, LOADING, PADDING, TEXT_LABEL};
 
 const OUTER: f32 = 10.0;
 const SIDE_WIDTH: f32 = 248.0;
@@ -320,10 +320,17 @@ fn draw_wordmark(ui: &mut egui::Ui) {
 fn draw_waiting(ui: &mut egui::Ui, area: Rect, frame: &Frame, status: Option<&str>) {
     const CONTENT_WIDTH: f32 = 460.0;
     const CONTENT_HEIGHT: f32 = 430.0;
+    const CODE_SIZE: f32 = 148.0;
+    const CODE_ROOM: f32 = CODE_SIZE + 44.0;
 
+    // Solo mientras se espera: conectando ya no hace falta decir dónde está la PC.
+    let address = frame.view.local_ip.filter(|_| status.is_none());
+    let height = CONTENT_HEIGHT + if address.is_some() { CODE_ROOM } else { 0.0 };
+    // Si la ventana es baja, el código es lo primero que sobra.
+    let code = address.filter(|_| area.height() >= height);
     let content = Rect::from_center_size(
         area.center(),
-        vec2(CONTENT_WIDTH.min(area.width()), CONTENT_HEIGHT.min(area.height())),
+        vec2(CONTENT_WIDTH.min(area.width()), height.min(area.height())),
     );
     centered(ui, content, |ui| {
         draw_wordmark(ui);
@@ -334,9 +341,15 @@ fn draw_waiting(ui: &mut egui::Ui, area: Rect, frame: &Frame, status: Option<&st
         ui.add_space(20.0);
 
         label(ui, status.unwrap_or(t().waiting_for_phone));
-        if let Some(ip) = frame.view.local_ip.filter(|_| status.is_none()) {
+        if let Some(ip) = address {
             ui.add_space(6.0);
             label(ui, &(t().this_pc_address)(&ip.to_string()));
+        }
+        if let Some(ip) = code {
+            ui.add_space(14.0);
+            draw_connect_code(ui, &puente_core::link::connect_link(ip), CODE_SIZE);
+            ui.add_space(6.0);
+            label(ui, t().scan_from_phone);
         }
         ui.add_space(20.0);
         if let Some(error) = &frame.view.last_error {
@@ -357,6 +370,32 @@ fn draw_waiting(ui: &mut egui::Ui, area: Rect, frame: &Frame, status: Option<&st
             draw_paired(ui, frame);
         }
     });
+}
+
+/// El enlace como código QR: oscuro sobre claro y con margen, que es como lo leen
+/// todos los lectores.
+fn draw_connect_code(ui: &mut egui::Ui, link: &str, size: f32) {
+    /// Módulos en blanco alrededor que pide el estándar.
+    const QUIET: usize = 4;
+
+    let (rect, _) = ui.allocate_exact_size(Vec2::splat(size), Sense::hover());
+    let Ok(code) = qrcode::QrCode::new(link.as_bytes()) else {
+        return;
+    };
+    let width = code.width();
+    let module = size / (width + QUIET * 2) as f32;
+    let painter = ui.painter();
+    painter.rect_filled(rect, 6.0, INK);
+    for (index, color) in code.to_colors().into_iter().enumerate() {
+        if color != qrcode::Color::Dark {
+            continue;
+        }
+        let column = (index % width + QUIET) as f32;
+        let row = (index / width + QUIET) as f32;
+        let corner = rect.min + vec2(column * module, row * module);
+        // Un pelo más grande para que no queden rendijas entre módulos.
+        painter.rect_filled(Rect::from_min_size(corner, Vec2::splat(module + 0.5)), 0.0, GROUND);
+    }
 }
 
 fn draw_paired(ui: &mut egui::Ui, frame: &Frame) {

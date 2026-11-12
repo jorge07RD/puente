@@ -30,6 +30,8 @@ use crate::{Error, Fingerprint, Identity, PROTOCOL_VERSION, Peer, PeerStore, Res
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const PROBE_EVERY: Duration = Duration::from_secs(3);
 const LOCAL_IP_EVERY: Duration = Duration::from_secs(5);
+/// Cuánto vale la intención de conectar con una dirección escrita o escaneada.
+const WANTED_FOR: Duration = Duration::from_secs(30);
 const FOUND_EXPIRES: Duration = Duration::from_secs(10);
 /// Pocos paquetes en cola: si la red se atrasa es mejor saltar que acumular retraso.
 const VIDEO_QUEUE: usize = 8;
@@ -792,7 +794,8 @@ impl Engine {
         self.send_command(PhoneCommand::Quality { level: quality });
     }
 
-    /// Móvil: pregunta también a esta dirección, o deja de hacerlo con `None`.
+    /// Móvil: pregunta también a esta dirección, o deja de hacerlo con `None`. Si la PC
+    /// responde enseguida, se conecta con ella y enseña el código para emparejar.
     pub fn set_manual_ip(&self, ip: Option<IpAddr>) {
         {
             let mut settings = self.shared.settings.lock().expect("ajustes disponibles");
@@ -1046,6 +1049,8 @@ async fn search_for_desktop(
         return;
     };
     let mut seen: Vec<(Found, Instant)> = Vec::new();
+    // La dirección recién pedida a mano: si responde, se conecta sin más toques.
+    let mut wanted: Option<(IpAddr, Instant)> = None;
     let mut ticker = interval(PROBE_EVERY);
     ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
     let mut buffer = [0; 1024];
@@ -1080,7 +1085,12 @@ async fn search_for_desktop(
                 seen.retain(|(other, _)| other.fingerprint != fingerprint);
                 seen.push((found.clone(), Instant::now()));
                 publish_found(&shared, &seen);
-                if found.paired {
+                let asked_for = wanted
+                    .is_some_and(|(ip, since)| ip == source.ip() && since.elapsed() < WANTED_FOR);
+                if asked_for {
+                    wanted = None;
+                }
+                if found.paired || asked_for {
                     start_attempt(&shared, found);
                 }
             }
@@ -1092,6 +1102,7 @@ async fn search_for_desktop(
                     }
                 }
                 Command::Probe(ip) => {
+                    wanted = Some((ip, Instant::now()));
                     let _ = socket.send_to(&probe, SocketAddr::new(ip, port)).await;
                 }
             }

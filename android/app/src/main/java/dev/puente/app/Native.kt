@@ -22,6 +22,9 @@ object Native {
 
     external fun onBatteryUnrestricted(unrestricted: Boolean)
 
+    /** El texto del código QR escaneado; se ignora si no es de Puente. */
+    external fun onScannedCode(text: String)
+
     /** Verdadero mientras hay una PC conectada. */
     external fun isLinked(): Boolean
 

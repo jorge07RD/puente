@@ -121,7 +121,7 @@ The Windows version builds and passes the automated tests, but it has not been t
 |---|---|
 | **PC** | Linux. Tested on Hyprland with XWayland |
 | **Phone** | Android 10 or newer, arm64. Tested on a Samsung Galaxy S23 Ultra |
-| **Network** | Both on the same local network, with port 1714 TCP and UDP open on the PC. If the PC does not show up by itself (guest Wi-Fi, VPN, another subnet), tap "Type IP" on the phone and enter the one Puente shows on the PC |
+| **Network** | Both on the same local network, with port 1714 TCP and UDP open on the PC. If the PC does not show up by itself (guest Wi-Fi, VPN, another subnet), tap "Scan QR" on the phone and point it at the code Puente shows on the PC, or "Type IP" to enter it by hand |
 
 If you use `ufw`:
 

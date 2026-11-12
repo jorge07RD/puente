@@ -85,9 +85,15 @@ fn a_desktop_that_does_not_show_up_is_found_by_its_address() {
     assert!(phone.view().found.is_empty());
 
     phone.set_manual_ip(Some("127.0.0.1".parse().unwrap()));
-    let view = wait_for(&phone, "la PC por su dirección", |view| !view.found.is_empty());
-    assert_eq!(view.manual_ip, Some("127.0.0.1".parse().unwrap()));
-    pair(&desktop, &phone);
+    // Sin tocar nada más: la PC responde y el móvil enseña el código.
+    let phone_view = wait_for(&phone, "código en el móvil", |view| pairing_code(view).is_some());
+    assert_eq!(phone_view.manual_ip, Some("127.0.0.1".parse().unwrap()));
+    assert_eq!(phone_view.found.len(), 1);
+    let desktop_view = wait_for(&desktop, "código en la PC", |view| pairing_code(view).is_some());
+    assert_eq!(pairing_code(&phone_view), pairing_code(&desktop_view));
+    desktop.answer_pairing(true);
+    phone.answer_pairing(true);
+    wait_for(&phone, "conexión en el móvil", connected);
 }
 
 #[test]

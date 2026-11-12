@@ -100,7 +100,7 @@ pub fn draw(
                 ui.colored_label(ACCENT, i18n::problem(error));
             }
             match &view.status {
-                Status::Searching => draw_searching(ui, engine, view, state, bridge),
+                Status::Searching => draw_searching(ui, engine, view, phone, state, bridge),
                 Status::Connecting { name } => {
                     card(ui, "01", t().card_link, true, |ui| {
                         draw_bridge(ui, bridge);
@@ -118,7 +118,14 @@ pub fn draw(
     });
 }
 
-fn draw_searching(ui: &mut egui::Ui, engine: &Engine, view: &View, state: &mut PhoneState, bridge: BridgeState) {
+fn draw_searching(
+    ui: &mut egui::Ui,
+    engine: &Engine,
+    view: &View,
+    phone: Option<&dyn PhoneActions>,
+    state: &mut PhoneState,
+    bridge: BridgeState,
+) {
     card(ui, "01", t().card_link, true, |ui| {
         draw_bridge(ui, bridge);
         label(ui, t().searching_pc);
@@ -162,11 +169,18 @@ fn draw_searching(ui: &mut egui::Ui, engine: &Engine, view: &View, state: &mut P
     }
 
     let shown = 1 + usize::from(middle_card) + usize::from(!view.paired.is_empty());
-    draw_address_card(ui, engine, view, state, &format!("{:02}", shown + 1));
+    draw_address_card(ui, engine, view, phone, state, &format!("{:02}", shown + 1));
 }
 
 /// Para redes donde la PC no aparece sola: se pregunta directamente a su IP.
-fn draw_address_card(ui: &mut egui::Ui, engine: &Engine, view: &View, state: &mut PhoneState, index: &str) {
+fn draw_address_card(
+    ui: &mut egui::Ui,
+    engine: &Engine,
+    view: &View,
+    phone: Option<&dyn PhoneActions>,
+    state: &mut PhoneState,
+    index: &str,
+) {
     /// Lo que se espera antes de decir que la dirección no responde.
     const ANSWER_SECONDS: f32 = 8.0;
 
@@ -184,9 +198,16 @@ fn draw_address_card(ui: &mut egui::Ui, engine: &Engine, view: &View, state: &mu
         let Some(ip) = view.manual_ip else {
             state.address_since = None;
             ui.label(RichText::new(t().address_help).color(INK_SOFT));
-            if pill(ui, t().type_address, TOUCH, false).clicked() {
-                state.address_draft = Some(String::new());
-            }
+            ui.horizontal(|ui| {
+                if let Some(phone) = phone
+                    && pill(ui, t().scan_code, TOUCH, true).clicked()
+                {
+                    phone.scan_code();
+                }
+                if pill(ui, t().type_address, TOUCH, false).clicked() {
+                    state.address_draft = Some(String::new());
+                }
+            });
             return;
         };
         // Tras reabrir la app la cuenta empieza de nuevo.

@@ -57,3 +57,8 @@ android {
         jvmTarget = "17"
     }
 }
+
+dependencies {
+    // Lector de códigos QR de Google Play: trae su propia pantalla y no pide cámara.
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+}

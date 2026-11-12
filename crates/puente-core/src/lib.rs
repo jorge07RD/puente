@@ -2,6 +2,7 @@
 
 pub mod engine;
 pub mod identity;
+pub mod link;
 pub mod pairing;
 pub mod peers;
 pub mod session;
