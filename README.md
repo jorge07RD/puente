@@ -59,7 +59,7 @@ En Linux, tener el móvil a mano suele exigir dos herramientas: **KDE Connect** 
 | **Pantalla** | Ver y controlar el móvil | Ratón, rueda y teclado; atrás, inicio y recientes, también con clic derecho, clic central y los botones laterales; se adapta al girar el móvil |
 | **Calidad** | Automática o fija | Auto ajusta los datos a lo que aguanta la red sin cortar la imagen; también Ahorro, Normal y Alta |
 | **Sonido** | Oír el móvil en la PC | Con interruptor para desactivarlo, y otro para silenciar el móvil mientras transmites |
-| **Avisos** | Notificaciones en el escritorio | Se pueden descartar de una en una o todas a la vez y, si la app lo admite, responder desde la PC |
+| **Avisos** | Notificaciones en el escritorio | Se pueden descartar de una en una o todas a la vez y, si la app lo admite, responder desde la PC. Con la campana eliges si salen como aviso de la PC, solo en la lista o apagados |
 | **Llamadas** | Ver quién llama | Aviso en la PC, también para llamadas de otras apps. Contestar desde la PC todavía no funciona en WhatsApp |
 | **Archivos** | Enviar en los dos sentidos | Arrastrando a la ventana, con progreso y confirmación de que se guardaron |
 | **Portapapeles** | Copiar y pegar entre dispositivos | Automático de la PC al móvil |
@@ -111,7 +111,7 @@ Descarga la última versión desde [Releases](https://github.com/jorge07RD/puent
 |---|---|---|
 | **Android** | `puente-*-android-arm64.apk` | Ábrelo en el móvil. Play Protect avisará por ser una app instalada a mano |
 | **Linux** | `puente-*-linux-x86_64.tar.gz` | Descomprime y ejecuta `./install.sh` |
-| **Windows** (experimental) | `puente-*-windows-x86_64.zip` | Descomprime y abre `puente.exe`; permite el acceso en el firewall |
+| **Windows** (experimental) | `puente-*-windows-x86_64.zip` | Descomprime y abre `puente.exe`; permite el acceso en el firewall. Para tenerlo a mano, clic derecho en `puente.exe` y «Crear acceso directo» |
 
 La versión de Windows compila y pasa las pruebas automáticas, pero aún no se ha probado con un móvil real.
 
@@ -121,7 +121,7 @@ La versión de Windows compila y pasa las pruebas automáticas, pero aún no se 
 |---|---|
 | **PC** | Linux. Probado en Hyprland con XWayland |
 | **Móvil** | Android 10 o superior, arm64. Probado en un Samsung Galaxy S23 Ultra |
-| **Red** | Los dos en la misma red local, con el puerto 1714 TCP y UDP abierto en la PC |
+| **Red** | Los dos en la misma red local, con el puerto 1714 TCP y UDP abierto en la PC. Si la PC no aparece sola (Wi-Fi de invitados, VPN, otra subred), en el móvil toca «Escribir IP» y pon la que muestra Puente en la PC |
 
 Si usas `ufw`:
 

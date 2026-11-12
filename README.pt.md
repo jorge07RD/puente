@@ -59,7 +59,7 @@ No Linux, ter o celular à mão costuma exigir duas ferramentas: o **KDE Connect
 | **Tela** | Ver e controlar o celular | Mouse, roda e teclado; voltar, início e recentes, também com clique direito, clique do meio e os botões laterais; acompanha o celular quando ele gira |
 | **Qualidade** | Automática ou fixa | Auto ajusta os dados ao que a rede aguenta sem cortar a imagem; também Economia, Normal e Alta |
 | **Som** | Ouvir o celular no PC | Com um botão para desativar, e outro para silenciar o celular durante a transmissão |
-| **Notificações** | Na área de trabalho | Dá para dispensá-las uma a uma ou todas de uma vez e, se o app permitir, responder pelo PC |
+| **Notificações** | Na área de trabalho | Dá para dispensá-las uma a uma ou todas de uma vez e, se o app permitir, responder pelo PC. O sino escolhe se aparecem como notificação do PC, só na lista ou desligadas |
 | **Chamadas** | Ver quem está ligando | Aviso no PC, também para chamadas de outros apps. Atender pelo PC ainda não funciona no WhatsApp |
 | **Arquivos** | Enviar nos dois sentidos | Arrastando para a janela, com progresso e confirmação de que foram salvos |
 | **Área de transferência** | Copiar e colar entre dispositivos | Automática do PC para o celular |
@@ -111,7 +111,7 @@ Baixe a versão mais recente em [Releases](https://github.com/jorge07RD/puente/r
 |---|---|---|
 | **Android** | `puente-*-android-arm64.apk` | Abra no celular. O Play Protect vai avisar por ser um app instalado manualmente |
 | **Linux** | `puente-*-linux-x86_64.tar.gz` | Descompacte e execute `./install.sh` |
-| **Windows** (experimental) | `puente-*-windows-x86_64.zip` | Descompacte e abra `puente.exe`; permita o acesso no firewall |
+| **Windows** (experimental) | `puente-*-windows-x86_64.zip` | Descompacte e abra `puente.exe`; permita o acesso no firewall. Para deixá-lo à mão, clique com o botão direito em `puente.exe` e escolha «Criar atalho» |
 
 A versão para Windows compila e passa nos testes automáticos, mas ainda não foi testada com um celular de verdade.
 
@@ -121,7 +121,7 @@ A versão para Windows compila e passa nos testes automáticos, mas ainda não f
 |---|---|
 | **PC** | Linux. Testado no Hyprland com XWayland |
 | **Celular** | Android 10 ou superior, arm64. Testado em um Samsung Galaxy S23 Ultra |
-| **Rede** | Os dois na mesma rede local, com a porta 1714 TCP e UDP aberta no PC |
+| **Rede** | Os dois na mesma rede local, com a porta 1714 TCP e UDP aberta no PC. Se o PC não aparecer sozinho (Wi-Fi de convidados, VPN, outra sub-rede), toque em «Digitar IP» no celular e coloque o que o Puente mostra no PC |
 
 Se você usa `ufw`:
 
