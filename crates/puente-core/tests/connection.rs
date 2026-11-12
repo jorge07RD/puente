@@ -13,7 +13,7 @@ use puente_core::wire::{
     read_message, write_message,
 };
 use puente_core::DesktopEvent;
-use puente_core::{Config, Engine, Error, Identity, PeerStore, Role, Status, VideoQuality, View};
+use puente_core::{Config, Engine, Error, Identity, NoticeMode, PeerStore, Role, Status, VideoQuality, View};
 use tokio::sync::oneshot;
 
 fn free_port() -> u16 {
@@ -67,6 +67,35 @@ fn pair(desktop: &Engine, phone: &Engine) {
     phone.answer_pairing(true);
     wait_for(desktop, "conexión en la PC", connected);
     wait_for(phone, "conexión en el móvil", connected);
+}
+
+#[test]
+fn a_desktop_that_does_not_show_up_is_found_by_its_address() {
+    let desktop_dir = tempfile::tempdir().unwrap();
+    let phone_dir = tempfile::tempdir().unwrap();
+    let port = free_port();
+    let desktop = engine(Role::Desktop, desktop_dir.path(), port);
+    // Sin destinos, como en una red que no deja pasar la difusión.
+    let mut config = Config::new(Role::Phone, phone_dir.path().to_path_buf(), "Phone".to_string());
+    config.port = port;
+    config.probe_targets = Vec::new();
+    let phone = Engine::start(config, || {}).unwrap();
+
+    sleep(Duration::from_millis(300));
+    assert!(phone.view().found.is_empty());
+
+    // Como en el código QR: varias direcciones, y solo una responde.
+    phone.try_addresses(vec!["127.0.0.9".parse().unwrap(), "127.0.0.1".parse().unwrap()]);
+    assert_eq!(phone.view().manual_ip, Some("127.0.0.9".parse().unwrap()));
+    // Sin tocar nada más: la PC responde y el móvil enseña el código.
+    let phone_view = wait_for(&phone, "código en el móvil", |view| pairing_code(view).is_some());
+    assert_eq!(phone_view.manual_ip, Some("127.0.0.1".parse().unwrap()));
+    assert_eq!(phone_view.found.len(), 1);
+    let desktop_view = wait_for(&desktop, "código en la PC", |view| pairing_code(view).is_some());
+    assert_eq!(pairing_code(&phone_view), pairing_code(&desktop_view));
+    desktop.answer_pairing(true);
+    phone.answer_pairing(true);
+    wait_for(&phone, "conexión en el móvil", connected);
 }
 
 #[test]
@@ -209,6 +238,35 @@ fn phone_reports_reach_the_desktop() {
         events.recv_timeout(Duration::from_secs(5)).unwrap(),
         DesktopEvent::Clipboard("desde el móvil".to_string())
     );
+}
+
+#[test]
+fn silenced_notices_are_listed_without_a_desktop_event() {
+    let desktop_dir = tempfile::tempdir().unwrap();
+    let phone_dir = tempfile::tempdir().unwrap();
+    let port = free_port();
+    let desktop = engine(Role::Desktop, desktop_dir.path(), port);
+    let phone = engine(Role::Phone, phone_dir.path(), port);
+    let events = desktop.take_desktop_events().unwrap();
+    pair(&desktop, &phone);
+
+    desktop.set_notice_mode(NoticeMode::Silent);
+    phone.post_notification(NotificationInfo {
+        key: "k1".to_string(),
+        app: "App".to_string(),
+        title: "Hola".to_string(),
+        text: "Mundo".to_string(),
+        can_reply: false,
+    });
+    wait_for(&desktop, "aviso en silencio", |v| !v.notifications.is_empty());
+
+    // El portapapeles llega después por el mismo canal: si es lo primero, el aviso no salió.
+    phone.send_clipboard("después".to_string());
+    assert_eq!(
+        events.recv_timeout(Duration::from_secs(5)).unwrap(),
+        DesktopEvent::Clipboard("después".to_string())
+    );
+    assert_eq!(desktop.view().notice_mode, NoticeMode::Silent);
 }
 
 #[test]
@@ -422,6 +480,22 @@ fn the_phone_hears_the_chosen_quality_and_forgets_it_when_the_desktop_leaves() {
 
     drop(desktop);
     assert_eq!(next_quality(), "balanced", "otra PC empieza con la calidad normal");
+}
+
+#[test]
+fn each_side_learns_the_other_version_while_connected() {
+    let desktop_dir = tempfile::tempdir().unwrap();
+    let phone_dir = tempfile::tempdir().unwrap();
+    let port = free_port();
+    let desktop = engine(Role::Desktop, desktop_dir.path(), port);
+    let phone = engine(Role::Phone, phone_dir.path(), port);
+    assert_eq!(desktop.view().peer_version, None);
+    pair(&desktop, &phone);
+    let version = Some(puente_core::APP_VERSION.to_string());
+    wait_for(&desktop, "versión del móvil", |v| v.peer_version == version);
+    wait_for(&phone, "versión de la PC", |v| v.peer_version == version);
+    drop(phone);
+    wait_for(&desktop, "sin móvil, sin versión", |v| v.peer_version.is_none());
 }
 
 #[test]
@@ -639,6 +713,7 @@ async fn an_impersonator_of_a_paired_peer_still_gets_the_code_prompt() {
             protocol: puente_core::PROTOCOL_VERSION,
             name: "móvil".to_string(),
             known: true,
+            version: String::new(),
         };
         write_message(&mut secure.stream, &hello).await.unwrap();
         let _their_hello = read_message(&mut secure.stream).await.unwrap();

@@ -9,18 +9,19 @@ use eframe::egui::{
 use puente_core::wire::{
     CallInfo, Input, KeyPress, MediaAction, NavAction, NotificationInfo, PhoneCommand, TouchPhase,
 };
-use puente_core::{Engine, Status, View};
+use puente_core::{Engine, NoticeMode, Status, View};
 
 use crate::{DesktopActions, RecentFile};
 use crate::dots::{self, BridgeState};
 use crate::i18n::{self, t};
 use crate::motion::{self, LinkMotion};
 use crate::icons::{self, Icon};
+use crate::versions;
 use crate::parts::{
     self, card_full, displayable, dot_figure, icon_button, icon_button_at, label, pill, pill_button, stat, switch_row,
     value_row,
 };
-use crate::theme::{ACCENT, EDGE, GAP, INK, INK_SOFT, LOADING, PADDING, TEXT_LABEL};
+use crate::theme::{ACCENT, EDGE, GAP, GROUND, INK, INK_SOFT, LOADING, PADDING, TEXT_LABEL};
 
 const OUTER: f32 = 10.0;
 const SIDE_WIDTH: f32 = 248.0;
@@ -70,6 +71,11 @@ pub struct DesktopState {
     reply: Option<ReplyDraft>,
     /// Hasta cuándo vale el segundo toque para desvincular.
     unpair_until: Option<f32>,
+    /// La versión del móvil cuyo aviso se cerró; con otra versión vuelve a salir.
+    closed_version_notice: Option<String>,
+    /// La dirección y su código QR están a la vista. Ocultos por defecto: la pantalla
+    /// puede estar compartida o a la vista de otros.
+    address_shown: bool,
     link: LinkMotion,
     cards: CardMotion,
 }
@@ -246,6 +252,8 @@ struct Frame<'a> {
     recent_files: Vec<RecentFile>,
     /// El aviso de llamada, que tapa lo que haya debajo.
     call_rect: Option<Rect>,
+    /// El aviso de versiones distintas, que también tapa lo de debajo.
+    notice_rect: Option<Rect>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -283,20 +291,27 @@ pub fn draw(
         hovering_files,
         recent_files,
         call_rect: None,
+        notice_rect: None,
     };
     let area = ui.max_rect().shrink(OUTER);
     match &view.status {
-        Status::Searching => draw_waiting(ui, area, &frame, None),
+        Status::Searching => draw_waiting(ui, area, &frame, None, &mut state.address_shown),
         Status::Connecting { name } => {
             let text = (t().connecting_to)(name);
-            draw_waiting(ui, area, &frame, Some(&text));
+            draw_waiting(ui, area, &frame, Some(&text), &mut state.address_shown);
         }
         Status::Pairing {
             name,
             code,
             answered,
-        } => draw_pairing(ui, area, &frame, name, code, *answered),
-        Status::Connected { name } => draw_connected(ui, area, &frame, texture, state, name),
+        } => {
+            state.address_shown = false;
+            draw_pairing(ui, area, &frame, name, code, *answered);
+        }
+        Status::Connected { name } => {
+            state.address_shown = false;
+            draw_connected(ui, area, &frame, texture, state, name);
+        }
     }
 }
 
@@ -311,13 +326,28 @@ fn draw_wordmark(ui: &mut egui::Ui) {
     dot_figure(ui, "PUENTE", "", 7.0, INK);
 }
 
-fn draw_waiting(ui: &mut egui::Ui, area: Rect, frame: &Frame, status: Option<&str>) {
+fn draw_waiting(ui: &mut egui::Ui, area: Rect, frame: &Frame, status: Option<&str>, address_shown: &mut bool) {
     const CONTENT_WIDTH: f32 = 460.0;
     const CONTENT_HEIGHT: f32 = 430.0;
+    const CODE_SIZE: f32 = 148.0;
+    const CODE_ROOM: f32 = CODE_SIZE + 44.0;
+    const REVEAL_HEIGHT: f32 = 32.0;
+    const REVEAL_ROOM: f32 = REVEAL_HEIGHT + 14.0;
 
+    // Solo mientras se espera: conectando ya no hace falta decir dónde está la PC.
+    let addresses: &[std::net::IpAddr] = if status.is_none() { &frame.view.local_ips } else { &[] };
+    let shown = *address_shown && !addresses.is_empty();
+    let extra = match (addresses.is_empty(), shown) {
+        (true, _) => 0.0,
+        (false, false) => REVEAL_ROOM,
+        (false, true) => REVEAL_ROOM + CODE_ROOM,
+    };
+    let height = CONTENT_HEIGHT + extra;
+    // Si la ventana es baja, el código es lo primero que sobra.
+    let show_code = shown && area.height() >= height;
     let content = Rect::from_center_size(
         area.center(),
-        vec2(CONTENT_WIDTH.min(area.width()), CONTENT_HEIGHT.min(area.height())),
+        vec2(CONTENT_WIDTH.min(area.width()), height.min(area.height())),
     );
     centered(ui, content, |ui| {
         draw_wordmark(ui);
@@ -328,6 +358,24 @@ fn draw_waiting(ui: &mut egui::Ui, area: Rect, frame: &Frame, status: Option<&st
         ui.add_space(20.0);
 
         label(ui, status.unwrap_or(t().waiting_for_phone));
+        if shown {
+            let list: Vec<String> = addresses.iter().map(ToString::to_string).collect();
+            ui.add_space(6.0);
+            label(ui, &(t().this_pc_address)(&list.join(" · ")));
+        }
+        if !addresses.is_empty() {
+            let text = if shown { t().hide_address } else { t().show_address };
+            ui.add_space(8.0);
+            if pill(ui, text, REVEAL_HEIGHT, false).clicked() {
+                *address_shown = !shown;
+            }
+        }
+        if show_code {
+            ui.add_space(14.0);
+            draw_connect_code(ui, &puente_core::link::connect_link(addresses), CODE_SIZE);
+            ui.add_space(6.0);
+            label(ui, t().scan_from_phone);
+        }
         ui.add_space(20.0);
         if let Some(error) = &frame.view.last_error {
             let shown = ui.colored_label(ACCENT, i18n::problem(error));
@@ -347,6 +395,32 @@ fn draw_waiting(ui: &mut egui::Ui, area: Rect, frame: &Frame, status: Option<&st
             draw_paired(ui, frame);
         }
     });
+}
+
+/// El enlace como código QR: oscuro sobre claro y con margen, que es como lo leen
+/// todos los lectores.
+fn draw_connect_code(ui: &mut egui::Ui, link: &str, size: f32) {
+    /// Módulos en blanco alrededor que pide el estándar.
+    const QUIET: usize = 4;
+
+    let (rect, _) = ui.allocate_exact_size(Vec2::splat(size), Sense::hover());
+    let Ok(code) = qrcode::QrCode::new(link.as_bytes()) else {
+        return;
+    };
+    let width = code.width();
+    let module = size / (width + QUIET * 2) as f32;
+    let painter = ui.painter();
+    painter.rect_filled(rect, 6.0, INK);
+    for (index, color) in code.to_colors().into_iter().enumerate() {
+        if color != qrcode::Color::Dark {
+            continue;
+        }
+        let column = (index % width + QUIET) as f32;
+        let row = (index / width + QUIET) as f32;
+        let corner = rect.min + vec2(column * module, row * module);
+        // Un pelo más grande para que no queden rendijas entre módulos.
+        painter.rect_filled(Rect::from_min_size(corner, Vec2::splat(module + 0.5)), 0.0, GROUND);
+    }
 }
 
 fn draw_paired(ui: &mut egui::Ui, frame: &Frame) {
@@ -411,8 +485,12 @@ fn draw_connected(
     name: &str,
 ) {
     send_dropped_files(ui, frame);
+    let call_rect = frame.view.call.as_ref().map(|_| call_banner_rect(area));
+    let mismatch = versions::mismatch(frame.view.peer_version.as_deref())
+        .filter(|mismatch| state.closed_version_notice.as_ref() != Some(&mismatch.peer));
     let frame = &Frame {
-        call_rect: frame.view.call.as_ref().map(|_| call_banner_rect(area)),
+        call_rect,
+        notice_rect: mismatch.as_ref().map(|_| version_notice_rect(area, call_rect)),
         recent_files: frame.recent_files.clone(),
         ..*frame
     };
@@ -479,6 +557,69 @@ fn draw_connected(
     if let (Some(call), Some(rect)) = (&frame.view.call, frame.call_rect) {
         draw_call_banner(ui, rect, frame.engine, call);
     }
+    if let (Some(mismatch), Some(rect)) = (&mismatch, frame.notice_rect)
+        && draw_version_notice(ui, rect, mismatch)
+    {
+        state.closed_version_notice = Some(mismatch.peer.clone());
+    }
+}
+
+/// Arriba a la derecha; si el aviso de llamada ocupa ese sitio, justo debajo.
+fn version_notice_rect(area: Rect, call: Option<Rect>) -> Rect {
+    const WIDTH: f32 = 320.0;
+    const HEIGHT: f32 = 96.0;
+    const MARGIN: f32 = 6.0;
+
+    let width = WIDTH.min(area.width() - MARGIN * 2.0);
+    let mut rect = Rect::from_min_size(
+        pos2(area.right() - MARGIN - width, area.top() + MARGIN),
+        vec2(width, HEIGHT),
+    );
+    if let Some(call) = call.filter(|call| call.intersects(rect)) {
+        rect = rect.translate(vec2(0.0, call.bottom() + MARGIN - rect.top()));
+    }
+    rect
+}
+
+/// Devuelve si se pulsó cerrar.
+fn draw_version_notice(ui: &mut egui::Ui, rect: Rect, mismatch: &versions::Mismatch) -> bool {
+    const CLOSE_SIZE: f32 = 28.0;
+
+    // Sin esto, un clic en el aviso llegaría a lo que tiene debajo.
+    ui.allocate_rect(rect, Sense::click());
+    ui.painter().rect(
+        rect,
+        crate::theme::CARD_RADIUS,
+        crate::theme::CARD,
+        Stroke::new(crate::theme::BORDER, EDGE),
+        StrokeKind::Inside,
+    );
+    let texts = t();
+    let peer = if mismatch.peer.is_empty() { texts.version_old } else { &mismatch.peer };
+    let advice = if mismatch.peer_is_older { texts.update_phone } else { texts.update_pc };
+
+    let builder = UiBuilder::new()
+        .max_rect(rect.shrink2(vec2(PADDING, 10.0)))
+        .layout(Layout::top_down(Align::Min));
+    ui.scope_builder(builder, |ui| {
+        ui.spacing_mut().item_spacing.y = 4.0;
+        let closed = ui
+            .horizontal(|ui| {
+                label(ui, texts.versions_differ);
+                let (dot, _) = ui.allocate_exact_size(vec2(8.0, TEXT_LABEL), Sense::hover());
+                ui.painter().circle_filled(dot.center(), 3.5, ACCENT);
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    icon_button(ui, Icon::Close, CLOSE_SIZE, false).on_hover_text(texts.dismiss).clicked()
+                })
+                .inner
+            })
+            .inner;
+        let versions = format!("PC {} · {} {peer}", mismatch.own, texts.phone_side);
+        ui.add(egui::Label::new(RichText::new(versions).color(INK)).truncate());
+        ui.add(egui::Label::new(RichText::new(advice).color(INK_SOFT)).truncate());
+        closed
+    })
+    .inner
 }
 
 fn call_banner_rect(area: Rect) -> Rect {
@@ -932,7 +1073,13 @@ fn notices_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame, state: &mut Deskto
         state.reply = None;
     }
 
-    card_full(ui, rect, "06", t().card_notices, !notices.is_empty(), "", |ui| {
+    let mode = frame.view.notice_mode;
+    let listed = mode != NoticeMode::Off && !notices.is_empty();
+    card_full(ui, rect, "06", t().card_notices, listed, "", |ui| {
+        if mode == NoticeMode::Off {
+            label(ui, t().notices_are_off);
+            return;
+        }
         if notices.is_empty() {
             label(ui, t().no_notices);
             return;
@@ -947,19 +1094,34 @@ fn notices_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame, state: &mut Deskto
                 }
             });
     });
-    if !notices.is_empty() {
-        dismiss_all_control(ui, rect, frame);
-    }
+    notices_header(ui, rect, frame, listed);
 }
 
-/// Borra en el móvil todos los avisos de la lista, con el contador a su lado.
-fn dismiss_all_control(ui: &mut egui::Ui, card: Rect, frame: &Frame) {
+/// El selector de modo y, si hay avisos a la vista, el control para borrarlos todos
+/// en el móvil con el contador a su lado.
+fn notices_header(ui: &mut egui::Ui, card: Rect, frame: &Frame, listed: bool) {
     /// Por debajo de este ancho, el texto chocaría con el título de la tarjeta.
-    const TEXT_MIN_WIDTH: f32 = 300.0;
+    const TEXT_MIN_WIDTH: f32 = 440.0;
 
     let notices = &frame.view.notifications;
+    let mode = frame.view.notice_mode;
     in_card_header(ui, card, |ui| {
-        let pressed = if card.width() >= TEXT_MIN_WIDTH {
+        let wide = card.width() >= TEXT_MIN_WIDTH;
+        let name = i18n::notice_mode_label(mode);
+        let selector = if wide {
+            pill(ui, name, HEADER_HEIGHT, false).on_hover_text(t().notices_mode_hint)
+        } else {
+            let icon = if mode == NoticeMode::On { Icon::Bell } else { Icon::BellOff };
+            icon_button(ui, icon, HEADER_HEIGHT, false)
+                .on_hover_text(format!("{name}. {}", t().notices_mode_hint))
+        };
+        if selector.clicked() {
+            frame.engine.set_notice_mode(mode.next());
+        }
+        if !listed {
+            return;
+        }
+        let pressed = if wide {
             pill(ui, t().dismiss_all, HEADER_HEIGHT, false).clicked()
         } else {
             icon_button(ui, Icon::Close, HEADER_HEIGHT, false)
@@ -1262,7 +1424,12 @@ fn forward_input(ui: &egui::Ui, screen: Rect, frame: &Frame, touching: &mut bool
     let (events, hover) = ui.input(|input| (input.events.clone(), input.pointer.hover_pos()));
     // Lo que se teclea en una respuesta no debe acabar también en el móvil.
     let typing_here = ui.ctx().egui_wants_keyboard_input();
-    let covered = |position: Pos2| frame.call_rect.is_some_and(|rect| rect.contains(position));
+    let covered = |position: Pos2| {
+        [frame.call_rect, frame.notice_rect]
+            .into_iter()
+            .flatten()
+            .any(|rect| rect.contains(position))
+    };
     let touch = |phase, position| {
         let (x, y) = normalized(screen, position);
         engine.send_input(Input::Touch { phase, x, y });

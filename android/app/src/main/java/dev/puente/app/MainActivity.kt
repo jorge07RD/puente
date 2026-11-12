@@ -12,6 +12,10 @@ import android.os.PowerManager
 import android.os.Process
 import android.provider.Settings
 import android.view.WindowInsets
+import android.widget.Toast
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import kotlin.system.exitProcess
 
 class MainActivity : NativeActivity() {
@@ -95,6 +99,19 @@ class MainActivity : NativeActivity() {
             Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
                 .setData(Uri.parse("package:$packageName")),
         )
+    }
+
+    /** Llamado desde Rust. El lector es de Google Play: no pide permiso de cámara. */
+    fun scanCode() = runOnUiThread {
+        val options = GmsBarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .build()
+        GmsBarcodeScanning.getClient(this, options).startScan()
+            .addOnSuccessListener { code -> code.rawValue?.let(Native::onScannedCode) }
+            .addOnFailureListener { error ->
+                Native.log("no se pudo escanear: $error")
+                Toast.makeText(this, R.string.scan_failed, Toast.LENGTH_LONG).show()
+            }
     }
 
     private fun askForCapture() {

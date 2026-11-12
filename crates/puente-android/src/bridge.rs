@@ -65,6 +65,10 @@ impl PhoneActions for ActivityActions {
         self.call("openBatterySettings");
     }
 
+    fn scan_code(&self) {
+        self.call("scanCode");
+    }
+
     fn battery_unrestricted(&self) -> bool {
         BATTERY_UNRESTRICTED.load(Ordering::SeqCst)
     }
@@ -425,6 +429,22 @@ pub extern "system" fn Java_dev_puente_app_Native_onCall(
     };
     if let Some(engine) = running_engine() {
         engine.report_call(call);
+    }
+}
+
+/// El texto de un código escaneado. Solo se atiende si es un enlace de Puente.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_puente_app_Native_onScannedCode(mut env: JNIEnv, _this: JObject, value: JString) {
+    let scanned = text(&mut env, &value);
+    let Some(engine) = running_engine() else {
+        return;
+    };
+    let addresses = puente_core::link::parse_connect_link(&scanned);
+    if addresses.is_empty() {
+        report("el código escaneado no es de Puente".to_string());
+    } else {
+        engine.try_addresses(addresses);
+        request_repaint();
     }
 }
 

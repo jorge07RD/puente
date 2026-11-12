@@ -2,6 +2,7 @@
 <resources>
     <string name="input_service_description">Lets you control this phone with the mouse and keyboard of your paired PC while you share the screen with Puente.</string>
     <string name="share_label">Send to PC</string>
+    <string name="scan_failed">Could not open the QR reader</string>
     <string name="notification_service_label">Puente: notifications on the PC</string>
     <string name="input_service_label">Puente: control from the PC</string>
 </resources>

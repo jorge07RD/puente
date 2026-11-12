@@ -165,8 +165,24 @@ pub fn pill(ui: &mut egui::Ui, text: &str, height: f32, primary: bool) -> Respon
         foreground,
     );
     let size = vec2(galley.size().x + SIDE * 2.0, height);
+    paint_pill(ui, size, galley, primary)
+}
+
+/// Una píldora del ancho que se le diga, para rejillas de teclas iguales.
+pub fn pill_sized(ui: &mut egui::Ui, text: &str, size: egui::Vec2, primary: bool) -> Response {
+    let foreground = if primary { ACCENT } else { INK };
+    let galley = ui.painter().layout_no_wrap(
+        text.to_uppercase(),
+        FontId::new(TEXT_LABEL, medium()),
+        foreground,
+    );
+    paint_pill(ui, size, galley, primary)
+}
+
+fn paint_pill(ui: &mut egui::Ui, size: egui::Vec2, galley: std::sync::Arc<egui::Galley>, primary: bool) -> Response {
+    let foreground = if primary { ACCENT } else { INK };
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
-    let radius = height / 2.0;
+    let radius = size.y / 2.0;
 
     let (fill, edge) = if response.is_pointer_button_down_on() {
         (EDGE, if primary { ACCENT } else { INK })

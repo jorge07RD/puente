@@ -23,6 +23,9 @@ pub enum Message {
         protocol: u32,
         name: String,
         known: bool,
+        /// Versión de la app. Las anteriores a la 0.3.1 no la envían.
+        #[serde(default)]
+        version: String,
     },
     PairCommit {
         commit: String,
@@ -85,6 +88,10 @@ pub enum Message {
     Log {
         text: String,
     },
+    /// Algo que esta versión no entiende, de un otro lado más nuevo. Se ignora en vez
+    /// de cortar la conexión; nunca se envía.
+    #[serde(skip)]
+    Unknown,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -272,10 +279,12 @@ async fn read_raw<R: AsyncRead + Unpin>(reader: &mut R, limit: usize) -> Result<
     Ok((kind[0], body))
 }
 
+/// Ya autenticado, lo que no se entiende se convierte en [`Message::Unknown`]: un tipo de
+/// mensaje, una orden o un valor nuevos no deben cortar la conexión con una versión vieja.
 pub async fn read_frame<R: AsyncRead + Unpin>(reader: &mut R) -> Result<Frame> {
     let (kind, body) = read_raw(reader, MAX_FRAME).await?;
     match kind {
-        KIND_CONTROL => Ok(Frame::Control(serde_json::from_slice(&body)?)),
+        KIND_CONTROL => Ok(Frame::Control(serde_json::from_slice(&body).unwrap_or(Message::Unknown))),
         KIND_VIDEO => {
             let (&flags, data) = body
                 .split_first()
@@ -296,7 +305,7 @@ pub async fn read_frame<R: AsyncRead + Unpin>(reader: &mut R) -> Result<Frame> {
                 data: data.to_vec(),
             })
         }
-        _ => Err(Error::Protocol("tipo de mensaje desconocido".to_string())),
+        _ => Ok(Frame::Control(Message::Unknown)),
     }
 }
 
@@ -311,4 +320,44 @@ pub async fn read_message<R: AsyncRead + Unpin>(reader: &mut R) -> Result<Messag
         return Err(Error::Protocol("mensaje inesperado durante el saludo".to_string()));
     }
     Ok(serde_json::from_slice(&body)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn read_raw_frame(kind: u8, body: &[u8]) -> Result<Frame> {
+        let mut bytes = (body.len() as u32).to_be_bytes().to_vec();
+        bytes.push(kind);
+        bytes.extend_from_slice(body);
+        read_frame(&mut bytes.as_slice()).await
+    }
+
+    #[tokio::test]
+    async fn what_a_newer_peer_sends_is_ignored_instead_of_failing() {
+        let unknown = Frame::Control(Message::Unknown);
+        let samples: [&[u8]; 4] = [
+            br#"{"type":"from_the_future"}"#,
+            br#"{"type":"command","command":"teleport"}"#,
+            br#"{"type":"command","command":"quality","level":"cinema"}"#,
+            br#"{"type":"battery","percent":"mucho"}"#,
+        ];
+        for body in samples {
+            assert_eq!(read_raw_frame(KIND_CONTROL, body).await.unwrap(), unknown);
+        }
+        assert_eq!(read_raw_frame(42, b"nuevo").await.unwrap(), unknown);
+    }
+
+    #[tokio::test]
+    async fn known_messages_still_arrive_with_fields_they_do_not_know() {
+        let body = br#"{"type":"battery","percent":80,"charging":true,"health":"good"}"#;
+        let frame = read_raw_frame(KIND_CONTROL, body).await.unwrap();
+        assert_eq!(frame, Frame::Control(Message::Battery { percent: 80, charging: true }));
+    }
+
+    #[test]
+    fn an_old_hello_without_version_is_still_understood() {
+        let hello: Message = serde_json::from_str(r#"{"type":"hello","protocol":1,"name":"PC","known":true}"#).unwrap();
+        assert!(matches!(hello, Message::Hello { version, .. } if version.is_empty()));
+    }
 }

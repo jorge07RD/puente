@@ -1,6 +1,7 @@
 //! Preferencias del usuario, guardadas en disco.
 
 use std::fs;
+use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -60,6 +61,30 @@ impl VideoQuality {
     }
 }
 
+/// Qué hace la PC con los avisos que llegan del móvil.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NoticeMode {
+    /// En la tarjeta y como aviso del escritorio.
+    #[default]
+    On,
+    /// Solo en la tarjeta, sin aviso del escritorio.
+    Silent,
+    /// Ni en la tarjeta ni en el escritorio.
+    Off,
+}
+
+impl NoticeMode {
+    /// El siguiente al pulsar el selector.
+    pub fn next(self) -> Self {
+        match self {
+            Self::On => Self::Silent,
+            Self::Silent => Self::Off,
+            Self::Off => Self::On,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -70,6 +95,9 @@ pub struct Settings {
     pub phone_muted: bool,
     pub language: LanguageChoice,
     pub quality: VideoQuality,
+    pub notices: NoticeMode,
+    /// Móvil: dirección de la PC escrita a mano, para redes donde no se encuentra sola.
+    pub manual_ip: Option<IpAddr>,
 }
 
 impl Default for Settings {
@@ -80,6 +108,8 @@ impl Default for Settings {
             phone_muted: false,
             language: LanguageChoice::Auto,
             quality: VideoQuality::Auto,
+            notices: NoticeMode::On,
+            manual_ip: None,
         }
     }
 }
@@ -150,6 +180,35 @@ mod tests {
         assert_eq!(SettingsFile::load(path).current.quality, VideoQuality::High);
         let start = VideoQuality::Auto;
         assert_eq!(start.next().next().next().next(), start);
+    }
+
+    #[test]
+    fn the_notice_mode_is_saved_and_cycles_through_the_three_modes() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let mut file = SettingsFile::load(path.clone());
+        assert_eq!(file.current.notices, NoticeMode::On);
+        file.current.notices = NoticeMode::Silent;
+        file.save().unwrap();
+        assert!(fs::read_to_string(&path).unwrap().contains("\"silent\""));
+        assert_eq!(SettingsFile::load(path).current.notices, NoticeMode::Silent);
+        let start = NoticeMode::On;
+        assert_eq!(start.next().next().next(), start);
+    }
+
+    #[test]
+    fn the_manual_address_is_saved_and_can_be_removed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let mut file = SettingsFile::load(path.clone());
+        assert_eq!(file.current.manual_ip, None);
+        file.current.manual_ip = Some("192.168.1.20".parse().unwrap());
+        file.save().unwrap();
+        let mut file = SettingsFile::load(path.clone());
+        assert_eq!(file.current.manual_ip, Some("192.168.1.20".parse().unwrap()));
+        file.current.manual_ip = None;
+        file.save().unwrap();
+        assert_eq!(SettingsFile::load(path).current.manual_ip, None);
     }
 
     #[test]

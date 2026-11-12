@@ -2,6 +2,7 @@
 <resources>
     <string name="input_service_description">Permite manejar este móvil con el ratón y el teclado de tu PC emparejada mientras compartes la pantalla con Puente.</string>
     <string name="share_label">Enviar a la PC</string>
+    <string name="scan_failed">No se pudo abrir el lector de QR</string>
     <string name="notification_service_label">Puente: notificaciones en la PC</string>
     <string name="input_service_label">Puente: control desde la PC</string>
 </resources>

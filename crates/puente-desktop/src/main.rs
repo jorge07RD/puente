@@ -10,6 +10,8 @@ mod integration;
 #[cfg(target_os = "linux")]
 mod tray;
 mod window;
+#[cfg(windows)]
+mod windows;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -21,6 +23,8 @@ use puente_ui::i18n::{self, t};
 use puente_ui::{Demo, DemoKind, Gallery, PuenteApp};
 
 use crate::window::{Shell, WindowControl};
+
+const ICON_PNG: &[u8] = include_bytes!("../../../branding/png/puente-icon-192.png");
 
 fn data_dir() -> PathBuf {
     dirs::config_dir()
@@ -150,12 +154,18 @@ fn main() -> eframe::Result {
         send_and_exit(&arguments[at + 1..]);
     }
     let hidden = arguments.iter().any(|argument| argument == "--hidden");
+    #[cfg(windows)]
+    windows::register_app(&data_dir(), ICON_PNG);
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_app_id("puente")
+        .with_inner_size([1100.0, 860.0]);
+    if let Ok(icon) = eframe::icon_data::from_png_bytes(ICON_PNG) {
+        viewport = viewport.with_icon(icon);
+    }
     let options = eframe::NativeOptions {
         #[cfg(target_os = "linux")]
         event_loop_builder: linux_event_loop(),
-        viewport: egui::ViewportBuilder::default()
-            .with_app_id("puente")
-            .with_inner_size([1100.0, 860.0]),
+        viewport,
         ..Default::default()
     };
     if let Some((kind, output)) = demo_request(&arguments) {

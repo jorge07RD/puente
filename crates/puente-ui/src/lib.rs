@@ -10,6 +10,7 @@ mod motion;
 pub mod parts;
 mod phone;
 pub mod theme;
+mod versions;
 
 pub use demo::{Demo, DemoKind};
 pub use gallery::Gallery;
@@ -49,6 +50,8 @@ pub trait PhoneActions {
     fn open_accessibility_settings(&self);
     fn open_notification_settings(&self);
     fn open_battery_settings(&self);
+    /// Abre el lector de códigos para escanear el QR que enseña la PC.
+    fn scan_code(&self);
     /// Android tiene permitido no dormir la app en segundo plano.
     fn battery_unrestricted(&self) -> bool;
     /// Píxeles que ocupan arriba y abajo las barras del sistema.

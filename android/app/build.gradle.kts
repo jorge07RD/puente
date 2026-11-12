@@ -21,8 +21,8 @@ android {
         applicationId = "dev.puente.app"
         minSdk = 29
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.3.0"
+        versionCode = 6
+        versionName = "0.3.1"
         ndk {
             abiFilters += "arm64-v8a"
         }
@@ -56,4 +56,9 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+}
+
+dependencies {
+    // Lector de códigos QR de Google Play: trae su propia pantalla y no pide cámara.
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
 }

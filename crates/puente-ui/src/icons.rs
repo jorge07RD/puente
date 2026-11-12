@@ -16,6 +16,8 @@ pub enum Icon {
     Close,
     Stop,
     Bell,
+    /// La campana tachada: avisos sin sonar o apagados.
+    BellOff,
     Panels,
     Check,
     Unlink,
@@ -69,7 +71,10 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
         Icon::Stop => {
             painter.rect_filled(Rect::from_center_size(rect.center(), rect.size() * 0.5), 2.0, color);
         }
-        Icon::Bell => {
+        Icon::Bell | Icon::BellOff => {
+            if icon == Icon::BellOff {
+                line(vec![at(0.16, 0.14), at(0.84, 0.9)]);
+            }
             line(vec![
                 at(0.24, 0.68),
                 at(0.32, 0.56),

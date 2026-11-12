@@ -166,6 +166,8 @@ impl PhoneActions for SamplePhone {
 
     fn open_battery_settings(&self) {}
 
+    fn scan_code(&self) {}
+
     fn battery_unrestricted(&self) -> bool {
         true
     }
@@ -240,6 +242,12 @@ impl Demo {
             },
         };
         view.mirroring = streaming;
+        // La dirección real de esta máquina no debe acabar en las imágenes.
+        view.local_ips = match self.kind {
+            DemoKind::Desktop => vec!["192.168.1.20".parse().expect("dirección de ejemplo")],
+            DemoKind::Phone => Vec::new(),
+        };
+        view.manual_ip = None;
         view.input_enabled = true;
         view.notifications_enabled = true;
         view.battery = Some((78, true));

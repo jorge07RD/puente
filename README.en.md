@@ -59,7 +59,7 @@ On Linux, keeping your phone at hand usually takes two tools: **KDE Connect** fo
 | **Screen** | See and control the phone | Mouse, wheel and keyboard; back, home and recents, also with right click, middle click and the side buttons; follows the phone when it rotates |
 | **Quality** | Automatic or fixed | Auto fits the data to what the network handles without cutting the picture; also Saver, Normal and High |
 | **Sound** | Hear the phone on the PC | With a switch to turn it off, and another to mute the phone while streaming |
-| **Notifications** | On your desktop | Dismiss them one by one or all at once and, if the app allows it, reply from the PC |
+| **Notifications** | On your desktop | Dismiss them one by one or all at once and, if the app allows it, reply from the PC. The bell chooses whether they show as PC notifications, only in the list, or not at all |
 | **Calls** | See who is calling | Alert on the PC, also for calls from other apps. Answering from the PC does not work with WhatsApp yet |
 | **Files** | Send both ways | By dragging onto the window, with progress and confirmation that they were saved |
 | **Clipboard** | Copy and paste between devices | Automatic from the PC to the phone |
@@ -111,7 +111,7 @@ Get the latest version from [Releases](https://github.com/jorge07RD/puente/relea
 |---|---|---|
 | **Android** | `puente-*-android-arm64.apk` | Open it on the phone. Play Protect will warn you because it is installed by hand |
 | **Linux** | `puente-*-linux-x86_64.tar.gz` | Extract it and run `./install.sh` |
-| **Windows** (experimental) | `puente-*-windows-x86_64.zip` | Extract it and open `puente.exe`; allow access in the firewall |
+| **Windows** (experimental) | `puente-*-windows-x86_64.zip` | Extract it and open `puente.exe`; allow access in the firewall. To keep it handy, right-click `puente.exe` and choose "Create shortcut" |
 
 The Windows version builds and passes the automated tests, but it has not been tried with a real phone yet.
 
@@ -121,7 +121,7 @@ The Windows version builds and passes the automated tests, but it has not been t
 |---|---|
 | **PC** | Linux. Tested on Hyprland with XWayland |
 | **Phone** | Android 10 or newer, arm64. Tested on a Samsung Galaxy S23 Ultra |
-| **Network** | Both on the same local network, with port 1714 TCP and UDP open on the PC |
+| **Network** | Both on the same local network, with port 1714 TCP and UDP open on the PC. If the PC does not show up by itself (guest Wi-Fi, VPN, another subnet), tap "Scan QR" on the phone and point it at the code that appears on the PC after pressing "Show IP and QR code", or "Type IP" to enter it by hand |
 
 If you use `ufw`:
 

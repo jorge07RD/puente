@@ -4,7 +4,7 @@
 
 use std::sync::atomic::{AtomicU8, Ordering};
 
-use puente_core::{FileNote, LanguageChoice, Problem, VideoQuality};
+use puente_core::{FileNote, LanguageChoice, NoticeMode, Problem, VideoQuality};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Language {
@@ -113,6 +113,15 @@ pub fn quality_label(quality: VideoQuality) -> &'static str {
     }
 }
 
+pub fn notice_mode_label(mode: NoticeMode) -> &'static str {
+    let texts = t();
+    match mode {
+        NoticeMode::On => texts.notices_on,
+        NoticeMode::Silent => texts.notices_silent,
+        NoticeMode::Off => texts.notices_off,
+    }
+}
+
 pub fn file_note(note: &FileNote) -> String {
     let texts = t();
     match note {
@@ -150,6 +159,19 @@ pub struct Texts {
 
     // Conexión y emparejamiento.
     pub connecting_to: fn(&str) -> String,
+    pub this_pc_address: fn(&str) -> String,
+    pub show_address: &'static str,
+    pub hide_address: &'static str,
+    pub card_address: &'static str,
+    pub address_help: &'static str,
+    pub type_address: &'static str,
+    pub scan_code: &'static str,
+    pub scan_from_phone: &'static str,
+    pub address_placeholder: &'static str,
+    pub connect: &'static str,
+    pub remove: &'static str,
+    pub searching_at: fn(&str) -> String,
+    pub no_answer_from: fn(&str) -> String,
     pub pair_with: fn(&str) -> String,
     pub waiting_for_phone: &'static str,
     pub install_steps: [&'static str; 3],
@@ -217,6 +239,11 @@ pub struct Texts {
     pub reply_failed: &'static str,
     pub dismiss: &'static str,
     pub dismiss_all: &'static str,
+    pub notices_on: &'static str,
+    pub notices_silent: &'static str,
+    pub notices_off: &'static str,
+    pub notices_are_off: &'static str,
+    pub notices_mode_hint: &'static str,
 
     // Buscar móvil.
     pub stop_ring: &'static str,
@@ -255,6 +282,14 @@ pub struct Texts {
     pub tray_show: &'static str,
     pub tray_autostart: &'static str,
     pub tray_quit: &'static str,
+
+    // Versiones distintas.
+    pub versions_differ: &'static str,
+    pub phone_side: &'static str,
+    /// Lo que se muestra cuando el otro lado no dice su versión.
+    pub version_old: &'static str,
+    pub update_phone: &'static str,
+    pub update_pc: &'static str,
 
     // Móvil.
     pub sharing_tap_stop: &'static str,
@@ -297,6 +332,19 @@ static SPANISH: Texts = Texts {
     card_pair: "Emparejar",
 
     connecting_to: |name| format!("Conectando con {name}"),
+    this_pc_address: |ip| format!("IP de esta PC: {ip}"),
+    show_address: "Mostrar IP y código QR",
+    hide_address: "Ocultar",
+    card_address: "Conectar por IP",
+    address_help: "Si tu PC no aparece sola, en la PC pulsa «Mostrar IP y código QR» y escanéalo, o escribe la IP.",
+    type_address: "Escribir IP",
+    scan_code: "Escanear QR",
+    scan_from_phone: "Escanéalo desde Puente en el móvil",
+    address_placeholder: "IP de la PC",
+    connect: "Conectar",
+    remove: "Quitar",
+    searching_at: |ip| format!("Buscando en {ip}"),
+    no_answer_from: |ip| format!("{ip} no responde"),
     pair_with: |name| format!("Emparejar con {name}"),
     waiting_for_phone: "Esperando al móvil",
     install_steps: [
@@ -362,6 +410,11 @@ static SPANISH: Texts = Texts {
     reply_failed: "No se pudo enviar",
     dismiss: "Descartar",
     dismiss_all: "Borrar todo",
+    notices_on: "Activos",
+    notices_silent: "Silencio",
+    notices_off: "Apagados",
+    notices_are_off: "Avisos apagados",
+    notices_mode_hint: "Activos: en esta lista y como aviso de la PC. Silencio: solo en esta lista. Apagados: no se muestran",
 
     stop_ring: "Parar",
     ring_phone: "Hacer sonar el móvil",
@@ -395,6 +448,12 @@ static SPANISH: Texts = Texts {
     tray_show: "Mostrar Puente",
     tray_autostart: "Iniciar con la sesión",
     tray_quit: "Salir",
+
+    versions_differ: "Versiones distintas",
+    phone_side: "Móvil",
+    version_old: "0.3.0 o anterior",
+    update_phone: "Actualiza Puente en el móvil",
+    update_pc: "Actualiza Puente en la PC",
 
     sharing_tap_stop: "Compartiendo. Toca para detener",
     screen_stays_on: "La pantalla no se apagará mientras la PC esté conectada.",
@@ -436,6 +495,19 @@ static ENGLISH: Texts = Texts {
     card_pair: "Pair",
 
     connecting_to: |name| format!("Connecting to {name}"),
+    this_pc_address: |ip| format!("This PC's IP: {ip}"),
+    show_address: "Show IP and QR code",
+    hide_address: "Hide",
+    card_address: "Connect by IP",
+    address_help: "If your PC does not show up by itself, press \"Show IP and QR code\" on the PC and scan it, or type the IP.",
+    type_address: "Type IP",
+    scan_code: "Scan QR",
+    scan_from_phone: "Scan it from Puente on the phone",
+    address_placeholder: "PC's IP",
+    connect: "Connect",
+    remove: "Remove",
+    searching_at: |ip| format!("Looking at {ip}"),
+    no_answer_from: |ip| format!("{ip} does not answer"),
     pair_with: |name| format!("Pair with {name}"),
     waiting_for_phone: "Waiting for the phone",
     install_steps: [
@@ -501,6 +573,11 @@ static ENGLISH: Texts = Texts {
     reply_failed: "Could not send",
     dismiss: "Dismiss",
     dismiss_all: "Clear all",
+    notices_on: "On",
+    notices_silent: "Silent",
+    notices_off: "Off",
+    notices_are_off: "Notifications off",
+    notices_mode_hint: "On: in this list and as a PC notification. Silent: only in this list. Off: not shown",
 
     stop_ring: "Stop",
     ring_phone: "Make the phone ring",
@@ -534,6 +611,12 @@ static ENGLISH: Texts = Texts {
     tray_show: "Show Puente",
     tray_autostart: "Start with the session",
     tray_quit: "Quit",
+
+    versions_differ: "Different versions",
+    phone_side: "Phone",
+    version_old: "0.3.0 or older",
+    update_phone: "Update Puente on the phone",
+    update_pc: "Update Puente on the PC",
 
     sharing_tap_stop: "Sharing. Tap to stop",
     screen_stays_on: "The screen will stay on while the PC is connected.",
@@ -575,6 +658,19 @@ static PORTUGUESE: Texts = Texts {
     card_pair: "Parear",
 
     connecting_to: |name| format!("Conectando a {name}"),
+    this_pc_address: |ip| format!("IP deste PC: {ip}"),
+    show_address: "Mostrar IP e código QR",
+    hide_address: "Ocultar",
+    card_address: "Conectar por IP",
+    address_help: "Se o seu PC não aparecer sozinho, no PC toque em «Mostrar IP e código QR» e escaneie, ou digite o IP.",
+    type_address: "Digitar IP",
+    scan_code: "Escanear QR",
+    scan_from_phone: "Escaneie pelo Puente no celular",
+    address_placeholder: "IP do PC",
+    connect: "Conectar",
+    remove: "Remover",
+    searching_at: |ip| format!("Procurando em {ip}"),
+    no_answer_from: |ip| format!("{ip} não responde"),
     pair_with: |name| format!("Parear com {name}"),
     waiting_for_phone: "Aguardando o celular",
     install_steps: [
@@ -640,6 +736,11 @@ static PORTUGUESE: Texts = Texts {
     reply_failed: "Não foi possível enviar",
     dismiss: "Dispensar",
     dismiss_all: "Limpar tudo",
+    notices_on: "Ativas",
+    notices_silent: "Silêncio",
+    notices_off: "Desligadas",
+    notices_are_off: "Notificações desligadas",
+    notices_mode_hint: "Ativas: nesta lista e como notificação do PC. Silêncio: só nesta lista. Desligadas: não aparecem",
 
     stop_ring: "Parar",
     ring_phone: "Fazer o celular tocar",
@@ -673,6 +774,12 @@ static PORTUGUESE: Texts = Texts {
     tray_show: "Mostrar o Puente",
     tray_autostart: "Iniciar com a sessão",
     tray_quit: "Sair",
+
+    versions_differ: "Versões diferentes",
+    phone_side: "Celular",
+    version_old: "0.3.0 ou anterior",
+    update_phone: "Atualize o Puente no celular",
+    update_pc: "Atualize o Puente no PC",
 
     sharing_tap_stop: "Compartilhando. Toque para parar",
     screen_stays_on: "A tela não vai apagar enquanto o PC estiver conectado.",

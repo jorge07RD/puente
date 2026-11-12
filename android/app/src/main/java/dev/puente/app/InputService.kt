@@ -1,6 +1,7 @@
 package dev.puente.app
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.InputMethod.AccessibilityInputConnection
 import android.graphics.PixelFormat
 import android.graphics.PointF
 import android.hardware.display.DisplayManager
@@ -8,9 +9,11 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Display
+import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
@@ -103,9 +106,26 @@ class InputService : AccessibilityService() {
 
     private fun handleKey(key: String) {
         when (key) {
-            "backspace" -> deleteBackward()
+            "backspace" -> if (!pressKey(KeyEvent.KEYCODE_DEL)) deleteBackward()
             "enter" -> pressEnter()
         }
+    }
+
+    /**
+     * La conexión del teclado con el campo enfocado, desde Android 13. Escribir por ella
+     * deja que la app gestione su propio texto de ayuda, sin reescribir el campo entero.
+     */
+    private fun typing(): AccessibilityInputConnection? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) inputMethod?.currentInputConnection else null
+
+    /** Devuelve falso si no hay conexión por la que enviar la tecla. */
+    private fun pressKey(code: Int): Boolean {
+        val connection = typing() ?: return false
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return false
+        val now = SystemClock.uptimeMillis()
+        connection.sendKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, code, 0))
+        connection.sendKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, code, 0))
+        return true
     }
 
     private fun pressEnter() {
@@ -119,6 +139,11 @@ class InputService : AccessibilityService() {
     }
 
     private fun insertText(text: String) {
+        val connection = typing()
+        if (connection != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            connection.commitText(text, 1, null)
+            return
+        }
         edit { current, start, end ->
             current.replaceRange(start, end, text) to start + text.length
         }
@@ -140,7 +165,11 @@ class InputService : AccessibilityService() {
     /** Aplica un cambio al campo enfocado y deja el cursor donde corresponde. */
     private fun edit(change: (String, Int, Int) -> Pair<String, Int>) {
         val node = focusedEditable() ?: return
-        val current = if (node.isShowingHintText) "" else node.text?.toString().orEmpty()
+        node.refresh()
+        val shown = node.text?.toString().orEmpty()
+        // Algunos campos entregan su texto de ayuda como si fuera contenido.
+        val isHint = node.isShowingHintText || (shown.isNotEmpty() && shown == node.hintText?.toString())
+        val current = if (isHint) "" else shown
 
         val selectionStart = node.textSelectionStart
         val selectionEnd = node.textSelectionEnd

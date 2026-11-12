@@ -276,25 +276,31 @@ fn escape_markup(text: &str) -> String {
     text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
 }
 
+/// La base de todo aviso: a nombre de Puente y no del programa que lo lanza.
+fn notice() -> notify_rust::Notification {
+    let mut notice = notify_rust::Notification::new();
+    notice.appname("Puente");
+    #[cfg(windows)]
+    notice.app_id(crate::windows::APP_ID);
+    notice
+}
+
 fn show_notification(info: &NotificationInfo) {
-    let _ = notify_rust::Notification::new()
-        .appname("Puente")
+    let _ = notice()
         .summary(&format!("{}: {}", info.app, info.title))
         .body(&escape_markup(&info.text))
         .show();
 }
 
 fn show_call(call: &CallInfo) {
-    let _ = notify_rust::Notification::new()
-        .appname("Puente")
+    let _ = notice()
         .summary(&(t().call_from)(&call.caller))
         .body(&escape_markup(&call.app))
         .show();
 }
 
 fn show_file_received(path: &Path, name: &str) {
-    let _ = notify_rust::Notification::new()
-        .appname("Puente")
+    let _ = notice()
         .summary(t().file_received_title)
         .body(&escape_markup(&format!("{name}\n{}", path.display())))
         .show();

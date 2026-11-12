@@ -1,0 +1,25 @@
+name: Sitio
+
+# El sitio web lee la última versión de GitHub al compilar: al publicar un release
+# basta con pedirle a Cloudflare Pages que lo recompile.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  recompilar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pedir a Cloudflare Pages que recompile
+        env:
+          HOOK: ${{ secrets.SITIO_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::error::Falta el secreto SITIO_DEPLOY_HOOK con el deploy hook de Cloudflare Pages"
+            exit 1
+          fi
+          curl --fail --silent --show-error --request POST "$HOOK" > /dev/null
+          echo "Recompilación del sitio pedida."

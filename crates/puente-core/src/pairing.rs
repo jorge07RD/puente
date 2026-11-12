@@ -16,7 +16,7 @@ use tokio::time::timeout;
 
 use crate::identity::{decode_hex, encode_hex};
 use crate::wire::{Message, read_message, write_message};
-use crate::{Error, Fingerprint, Identity, PROTOCOL_VERSION, PeerStore, Result};
+use crate::{APP_VERSION, Error, Fingerprint, Identity, PROTOCOL_VERSION, PeerStore, Result};
 
 const STEP_TIMEOUT: Duration = Duration::from_secs(10);
 const USER_TIMEOUT: Duration = Duration::from_secs(120);
@@ -32,7 +32,15 @@ pub struct PairPrompt {
     pub code: String,
 }
 
-/// Completa el saludo y, si hace falta, el emparejamiento. Devuelve el nombre del otro lado.
+/// Lo que el otro lado contó de sí mismo al saludar.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Greeting {
+    pub name: String,
+    /// Vacía si el otro lado es anterior a la 0.3.1.
+    pub version: String,
+}
+
+/// Completa el saludo y, si hace falta, el emparejamiento.
 pub async fn establish<S>(
     stream: &mut S,
     role: Role,
@@ -40,7 +48,7 @@ pub async fn establish<S>(
     peer: Fingerprint,
     store: &Mutex<PeerStore>,
     prompt: impl FnOnce(PairPrompt) -> oneshot::Receiver<bool>,
-) -> Result<String>
+) -> Result<Greeting>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -49,6 +57,7 @@ where
         protocol: PROTOCOL_VERSION,
         name: identity.name.clone(),
         known,
+        version: APP_VERSION.to_string(),
     };
     write_message(stream, &hello).await?;
 
@@ -56,6 +65,7 @@ where
         protocol,
         name,
         known: peer_knows_us,
+        version,
     } = read_step(stream).await?
     else {
         return Err(unexpected());
@@ -66,8 +76,12 @@ where
         ));
     }
 
+    let greeting = Greeting {
+        name: name.clone(),
+        version,
+    };
     if known && peer_knows_us {
-        return Ok(name);
+        return Ok(greeting);
     }
 
     let nonces = exchange_nonces(stream, role).await?;
@@ -95,7 +109,7 @@ where
     };
 
     store.lock().expect("almacén disponible").add(&name, peer)?;
-    Ok(name)
+    Ok(greeting)
 }
 
 struct Nonces {

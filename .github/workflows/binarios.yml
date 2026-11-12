@@ -55,7 +55,7 @@ jobs:
           $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
           $name = "puente-$version-windows-x86_64"
           New-Item -ItemType Directory $name | Out-Null
-          Copy-Item target/release/puente.exe, LICENSE $name
+          Copy-Item target/release/puente.exe, assets/puente.ico, LICENSE $name
           Copy-Item crates/puente-ui/assets/fonts/OFL.txt "$name/OFL-MartianMono.txt"
           Compress-Archive -Path $name -DestinationPath "$name.zip"
       - uses: actions/upload-artifact@v4
