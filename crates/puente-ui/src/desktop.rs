@@ -324,10 +324,10 @@ fn draw_waiting(ui: &mut egui::Ui, area: Rect, frame: &Frame, status: Option<&st
     const CODE_ROOM: f32 = CODE_SIZE + 44.0;
 
     // Solo mientras se espera: conectando ya no hace falta decir dónde está la PC.
-    let address = frame.view.local_ip.filter(|_| status.is_none());
-    let height = CONTENT_HEIGHT + if address.is_some() { CODE_ROOM } else { 0.0 };
+    let addresses: &[std::net::IpAddr] = if status.is_none() { &frame.view.local_ips } else { &[] };
+    let height = CONTENT_HEIGHT + if addresses.is_empty() { 0.0 } else { CODE_ROOM };
     // Si la ventana es baja, el código es lo primero que sobra.
-    let code = address.filter(|_| area.height() >= height);
+    let show_code = !addresses.is_empty() && area.height() >= height;
     let content = Rect::from_center_size(
         area.center(),
         vec2(CONTENT_WIDTH.min(area.width()), height.min(area.height())),
@@ -341,13 +341,14 @@ fn draw_waiting(ui: &mut egui::Ui, area: Rect, frame: &Frame, status: Option<&st
         ui.add_space(20.0);
 
         label(ui, status.unwrap_or(t().waiting_for_phone));
-        if let Some(ip) = address {
+        if !addresses.is_empty() {
+            let list: Vec<String> = addresses.iter().map(ToString::to_string).collect();
             ui.add_space(6.0);
-            label(ui, &(t().this_pc_address)(&ip.to_string()));
+            label(ui, &(t().this_pc_address)(&list.join(" · ")));
         }
-        if let Some(ip) = code {
+        if show_code {
             ui.add_space(14.0);
-            draw_connect_code(ui, &puente_core::link::connect_link(ip), CODE_SIZE);
+            draw_connect_code(ui, &puente_core::link::connect_link(addresses), CODE_SIZE);
             ui.add_space(6.0);
             label(ui, t().scan_from_phone);
         }

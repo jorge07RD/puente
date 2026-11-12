@@ -219,15 +219,11 @@ fn draw_address_card(
         let answered = view.found.iter().any(|found| found.address.ip() == ip);
         let waiting = state.now - since < ANSWER_SECONDS;
         let text = if answered || waiting { t().searching_at } else { t().no_answer_from };
-        ui.horizontal(|ui| {
-            ui.set_min_height(TOUCH);
-            label(ui, &text(&ip.to_string()));
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if pill(ui, t().remove, TOUCH, false).clicked() {
-                    engine.set_manual_ip(None);
-                }
-            });
-        });
+        // En dos líneas: la dirección y el texto no caben al lado del botón.
+        label(ui, &text(&ip.to_string()));
+        if pill(ui, t().remove, TOUCH, false).clicked() {
+            engine.set_manual_ip(None);
+        }
     });
 }
 

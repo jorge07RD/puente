@@ -439,12 +439,12 @@ pub extern "system" fn Java_dev_puente_app_Native_onScannedCode(mut env: JNIEnv,
     let Some(engine) = running_engine() else {
         return;
     };
-    match puente_core::link::parse_connect_link(&scanned) {
-        Some(ip) => {
-            engine.set_manual_ip(Some(ip));
-            request_repaint();
-        }
-        None => report("el código escaneado no es de Puente".to_string()),
+    let addresses = puente_core::link::parse_connect_link(&scanned);
+    if addresses.is_empty() {
+        report("el código escaneado no es de Puente".to_string());
+    } else {
+        engine.try_addresses(addresses);
+        request_repaint();
     }
 }
 

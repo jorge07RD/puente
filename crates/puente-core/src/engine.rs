@@ -147,8 +147,8 @@ pub struct View {
     pub notice_mode: NoticeMode,
     /// Móvil: dirección de la PC escrita a mano, a la que también se pregunta.
     pub manual_ip: Option<IpAddr>,
-    /// PC: su dirección en la red, para escribirla en el móvil.
-    pub local_ip: Option<IpAddr>,
+    /// PC: sus direcciones, para escribirlas en el móvil. Primero la de la red principal.
+    pub local_ips: Vec<IpAddr>,
     /// Versión de la app al otro lado mientras hay conexión; vacía si es anterior a la 0.3.1.
     pub peer_version: Option<String>,
     /// PC: llamada entrante en este momento.
@@ -172,8 +172,9 @@ pub enum DesktopEvent {
 
 enum Command {
     Connect(Fingerprint),
-    /// Preguntar ya a esta dirección, sin esperar al siguiente turno.
-    Probe(IpAddr),
+    /// Preguntar ya a estas direcciones, sin esperar al siguiente turno, y conectar
+    /// con la primera que responda.
+    Probe(Vec<IpAddr>),
 }
 
 struct SessionHandle {
@@ -239,6 +240,15 @@ impl Shared {
     fn update(&self, change: impl FnOnce(&mut View)) {
         change(&mut self.view.lock().expect("vista disponible"));
         (self.repaint)();
+    }
+
+    fn save_manual_ip(&self, ip: Option<IpAddr>) {
+        {
+            let mut settings = self.settings.lock().expect("ajustes disponibles");
+            settings.current.manual_ip = ip;
+            let _ = settings.save();
+        }
+        self.update(|view| view.manual_ip = ip);
     }
 
     fn paired(&self) -> Vec<Peer> {
@@ -538,7 +548,7 @@ impl Engine {
             quality: settings.current.quality,
             notice_mode: settings.current.notices,
             manual_ip: settings.current.manual_ip,
-            local_ip: None,
+            local_ips: Vec::new(),
             peer_version: None,
             call: None,
             last_reply: None,
@@ -797,15 +807,20 @@ impl Engine {
     /// Móvil: pregunta también a esta dirección, o deja de hacerlo con `None`. Si la PC
     /// responde enseguida, se conecta con ella y enseña el código para emparejar.
     pub fn set_manual_ip(&self, ip: Option<IpAddr>) {
-        {
-            let mut settings = self.shared.settings.lock().expect("ajustes disponibles");
-            settings.current.manual_ip = ip;
-            let _ = settings.save();
-        }
-        self.shared.update(|view| view.manual_ip = ip);
+        self.shared.save_manual_ip(ip);
         if let Some(ip) = ip {
-            let _ = self.commands.send(Command::Probe(ip));
+            let _ = self.commands.send(Command::Probe(vec![ip]));
         }
+    }
+
+    /// Móvil: prueba varias direcciones de la misma PC, como las de su código QR, y se
+    /// queda con la que responda. Hasta entonces se busca en la primera.
+    pub fn try_addresses(&self, addresses: Vec<IpAddr>) {
+        let Some(first) = addresses.first().copied() else {
+            return;
+        };
+        self.shared.save_manual_ip(Some(first));
+        let _ = self.commands.send(Command::Probe(addresses));
     }
 
     pub fn set_notice_mode(&self, mode: NoticeMode) {
@@ -990,11 +1005,35 @@ async fn answer_probes(shared: Arc<Shared>, socket: UdpSocket, port: u16) {
 
 /// La dirección por la que esta máquina sale a la red. Conectar un socket UDP solo
 /// elige la ruta: no se envía nada.
-fn local_ip() -> Option<IpAddr> {
+fn main_ip() -> Option<IpAddr> {
     let socket = std::net::UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).ok()?;
     socket.connect((Ipv4Addr::new(192, 0, 2, 1), 9)).ok()?;
     let ip = socket.local_addr().ok()?.ip();
     (!ip.is_unspecified() && !ip.is_loopback()).then_some(ip)
+}
+
+/// Redes internas de contenedores y máquinas virtuales: el móvil nunca llega por ahí.
+fn is_internal_interface(name: &str) -> bool {
+    ["docker", "br-", "veth", "virbr", "vmnet", "lxc"]
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
+}
+
+/// Todas las direcciones IPv4 por las que el móvil podría llegar, con la de la red
+/// principal primero. Incluye las de VPN: con el móvil fuera de la Wi-Fi es la que vale.
+fn local_ips() -> Vec<IpAddr> {
+    const MAX_ADDRESSES: usize = 3;
+
+    let mut found: Vec<IpAddr> = main_ip().into_iter().collect();
+    for interface in if_addrs::get_if_addrs().unwrap_or_default() {
+        let ip = interface.ip();
+        let usable = ip.is_ipv4() && !interface.is_loopback() && !interface.is_link_local();
+        if usable && !is_internal_interface(&interface.name) && !found.contains(&ip) {
+            found.push(ip);
+        }
+    }
+    found.truncate(MAX_ADDRESSES);
+    found
 }
 
 /// PC: mantiene al día la dirección que se enseña para escribirla en el móvil.
@@ -1003,10 +1042,10 @@ async fn watch_local_ip(shared: Arc<Shared>) {
     ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
     loop {
         ticker.tick().await;
-        let ip = local_ip();
-        let changed = shared.view.lock().expect("vista disponible").local_ip != ip;
+        let ips = local_ips();
+        let changed = shared.view.lock().expect("vista disponible").local_ips != ips;
         if changed {
-            shared.update(|view| view.local_ip = ip);
+            shared.update(|view| view.local_ips = ips);
         }
     }
 }
@@ -1050,7 +1089,7 @@ async fn search_for_desktop(
     };
     let mut seen: Vec<(Found, Instant)> = Vec::new();
     // La dirección recién pedida a mano: si responde, se conecta sin más toques.
-    let mut wanted: Option<(IpAddr, Instant)> = None;
+    let mut wanted: Option<(Vec<IpAddr>, Instant)> = None;
     let mut ticker = interval(PROBE_EVERY);
     ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
     let mut buffer = [0; 1024];
@@ -1086,9 +1125,12 @@ async fn search_for_desktop(
                 seen.push((found.clone(), Instant::now()));
                 publish_found(&shared, &seen);
                 let asked_for = wanted
-                    .is_some_and(|(ip, since)| ip == source.ip() && since.elapsed() < WANTED_FOR);
+                    .as_ref()
+                    .is_some_and(|(ips, since)| ips.contains(&source.ip()) && since.elapsed() < WANTED_FOR);
                 if asked_for {
                     wanted = None;
+                    // De las direcciones probadas, se guarda la que funcionó.
+                    shared.save_manual_ip(Some(source.ip()));
                 }
                 if found.paired || asked_for {
                     start_attempt(&shared, found);
@@ -1101,9 +1143,11 @@ async fn search_for_desktop(
                         start_attempt(&shared, found.clone());
                     }
                 }
-                Command::Probe(ip) => {
-                    wanted = Some((ip, Instant::now()));
-                    let _ = socket.send_to(&probe, SocketAddr::new(ip, port)).await;
+                Command::Probe(ips) => {
+                    for ip in &ips {
+                        let _ = socket.send_to(&probe, SocketAddr::new(*ip, port)).await;
+                    }
+                    wanted = Some((ips, Instant::now()));
                 }
             }
         }

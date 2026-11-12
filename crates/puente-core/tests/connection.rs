@@ -84,7 +84,9 @@ fn a_desktop_that_does_not_show_up_is_found_by_its_address() {
     sleep(Duration::from_millis(300));
     assert!(phone.view().found.is_empty());
 
-    phone.set_manual_ip(Some("127.0.0.1".parse().unwrap()));
+    // Como en el código QR: varias direcciones, y solo una responde.
+    phone.try_addresses(vec!["127.0.0.9".parse().unwrap(), "127.0.0.1".parse().unwrap()]);
+    assert_eq!(phone.view().manual_ip, Some("127.0.0.9".parse().unwrap()));
     // Sin tocar nada más: la PC responde y el móvil enseña el código.
     let phone_view = wait_for(&phone, "código en el móvil", |view| pairing_code(view).is_some());
     assert_eq!(phone_view.manual_ip, Some("127.0.0.1".parse().unwrap()));
