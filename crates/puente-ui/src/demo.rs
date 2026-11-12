@@ -240,6 +240,9 @@ impl Demo {
             },
         };
         view.mirroring = streaming;
+        // La dirección real de esta máquina no debe acabar en las imágenes.
+        view.local_ip = (self.kind == DemoKind::Desktop).then(|| "192.168.1.20".parse().expect("dirección de ejemplo"));
+        view.manual_ip = None;
         view.input_enabled = true;
         view.notifications_enabled = true;
         view.battery = Some((78, true));

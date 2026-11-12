@@ -10,6 +10,7 @@ mod motion;
 pub mod parts;
 mod phone;
 pub mod theme;
+mod versions;
 
 pub use demo::{Demo, DemoKind};
 pub use gallery::Gallery;

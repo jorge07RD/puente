@@ -12,12 +12,14 @@ pub mod transfers;
 pub mod wire;
 
 pub use engine::{Config, DesktopEvent, Engine, FileNote, Found, Problem, Status, View};
-pub use settings::{LanguageChoice, VideoQuality};
+pub use settings::{LanguageChoice, NoticeMode, VideoQuality};
 pub use identity::{Fingerprint, Identity};
 pub use pairing::Role;
 pub use peers::{Peer, PeerStore};
 
 pub const PROTOCOL_VERSION: u32 = 1;
+/// La versión de esta app, la misma en la PC y en el móvil.
+pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Puerto TCP/UDP de la app. Está dentro del rango abierto para KDE Connect,
 /// pero KDE Connect solo usa de 1716 en adelante.
