@@ -73,6 +73,9 @@ pub struct DesktopState {
     unpair_until: Option<f32>,
     /// La versión del móvil cuyo aviso se cerró; con otra versión vuelve a salir.
     closed_version_notice: Option<String>,
+    /// La dirección y su código QR están a la vista. Ocultos por defecto: la pantalla
+    /// puede estar compartida o a la vista de otros.
+    address_shown: bool,
     link: LinkMotion,
     cards: CardMotion,
 }
@@ -292,17 +295,23 @@ pub fn draw(
     };
     let area = ui.max_rect().shrink(OUTER);
     match &view.status {
-        Status::Searching => draw_waiting(ui, area, &frame, None),
+        Status::Searching => draw_waiting(ui, area, &frame, None, &mut state.address_shown),
         Status::Connecting { name } => {
             let text = (t().connecting_to)(name);
-            draw_waiting(ui, area, &frame, Some(&text));
+            draw_waiting(ui, area, &frame, Some(&text), &mut state.address_shown);
         }
         Status::Pairing {
             name,
             code,
             answered,
-        } => draw_pairing(ui, area, &frame, name, code, *answered),
-        Status::Connected { name } => draw_connected(ui, area, &frame, texture, state, name),
+        } => {
+            state.address_shown = false;
+            draw_pairing(ui, area, &frame, name, code, *answered);
+        }
+        Status::Connected { name } => {
+            state.address_shown = false;
+            draw_connected(ui, area, &frame, texture, state, name);
+        }
     }
 }
 
@@ -317,17 +326,25 @@ fn draw_wordmark(ui: &mut egui::Ui) {
     dot_figure(ui, "PUENTE", "", 7.0, INK);
 }
 
-fn draw_waiting(ui: &mut egui::Ui, area: Rect, frame: &Frame, status: Option<&str>) {
+fn draw_waiting(ui: &mut egui::Ui, area: Rect, frame: &Frame, status: Option<&str>, address_shown: &mut bool) {
     const CONTENT_WIDTH: f32 = 460.0;
     const CONTENT_HEIGHT: f32 = 430.0;
     const CODE_SIZE: f32 = 148.0;
     const CODE_ROOM: f32 = CODE_SIZE + 44.0;
+    const REVEAL_HEIGHT: f32 = 32.0;
+    const REVEAL_ROOM: f32 = REVEAL_HEIGHT + 14.0;
 
     // Solo mientras se espera: conectando ya no hace falta decir dónde está la PC.
     let addresses: &[std::net::IpAddr] = if status.is_none() { &frame.view.local_ips } else { &[] };
-    let height = CONTENT_HEIGHT + if addresses.is_empty() { 0.0 } else { CODE_ROOM };
+    let shown = *address_shown && !addresses.is_empty();
+    let extra = match (addresses.is_empty(), shown) {
+        (true, _) => 0.0,
+        (false, false) => REVEAL_ROOM,
+        (false, true) => REVEAL_ROOM + CODE_ROOM,
+    };
+    let height = CONTENT_HEIGHT + extra;
     // Si la ventana es baja, el código es lo primero que sobra.
-    let show_code = !addresses.is_empty() && area.height() >= height;
+    let show_code = shown && area.height() >= height;
     let content = Rect::from_center_size(
         area.center(),
         vec2(CONTENT_WIDTH.min(area.width()), height.min(area.height())),
@@ -341,10 +358,17 @@ fn draw_waiting(ui: &mut egui::Ui, area: Rect, frame: &Frame, status: Option<&st
         ui.add_space(20.0);
 
         label(ui, status.unwrap_or(t().waiting_for_phone));
-        if !addresses.is_empty() {
+        if shown {
             let list: Vec<String> = addresses.iter().map(ToString::to_string).collect();
             ui.add_space(6.0);
             label(ui, &(t().this_pc_address)(&list.join(" · ")));
+        }
+        if !addresses.is_empty() {
+            let text = if shown { t().hide_address } else { t().show_address };
+            ui.add_space(8.0);
+            if pill(ui, text, REVEAL_HEIGHT, false).clicked() {
+                *address_shown = !shown;
+            }
         }
         if show_code {
             ui.add_space(14.0);
