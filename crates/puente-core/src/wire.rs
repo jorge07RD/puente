@@ -88,10 +88,25 @@ pub enum Message {
     Log {
         text: String,
     },
+    /// Móvil: las otras PCs emparejadas que ve en la red ahora mismo.
+    OtherDesktops {
+        list: Vec<DesktopInfo>,
+    },
+    /// PC: pide al móvil que se pase a otra PC emparejada.
+    SwitchDesktop {
+        fingerprint: Fingerprint,
+    },
     /// Algo que esta versión no entiende, de un otro lado más nuevo. Se ignora en vez
     /// de cortar la conexión; nunca se envía.
     #[serde(skip)]
     Unknown,
+}
+
+/// Una PC que el móvil ve en la red, además de la conectada.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DesktopInfo {
+    pub name: String,
+    pub fingerprint: Fingerprint,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -223,15 +238,33 @@ pub enum Frame {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Discovery {
+    /// Las versiones anteriores a la 0.3.2 solo envían `protocol`.
     Probe {
         protocol: u32,
+        /// Quién pregunta, para que una PC libre sepa que el móvil está en la red.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        phone: Option<ProbingPhone>,
     },
     Announce {
         protocol: u32,
         name: String,
         port: u16,
         fingerprint: Fingerprint,
+        /// La PC pide al móvil que se pase a ella. Sin autenticar: el móvil solo lo
+        /// atiende si ya está emparejado con esa huella, y TLS la comprueba al conectar.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        claim: bool,
     },
+}
+
+/// Lo que el móvil cuenta de sí mismo al preguntar quién hay en la red.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProbingPhone {
+    pub name: String,
+    pub fingerprint: Fingerprint,
+    /// El nombre de la PC con la que está conectado, si hay una.
+    #[serde(default)]
+    pub connected_to: Option<String>,
 }
 
 pub async fn write_frame<W: AsyncWrite + Unpin>(writer: &mut W, frame: &Frame) -> Result<()> {
@@ -353,6 +386,32 @@ mod tests {
         let body = br#"{"type":"battery","percent":80,"charging":true,"health":"good"}"#;
         let frame = read_raw_frame(KIND_CONTROL, body).await.unwrap();
         assert_eq!(frame, Frame::Control(Message::Battery { percent: 80, charging: true }));
+    }
+
+    #[test]
+    fn discovery_stays_compatible_with_older_versions() {
+        let old: Discovery = serde_json::from_str(r#"{"kind":"probe","protocol":1}"#).unwrap();
+        assert_eq!(old, Discovery::Probe { protocol: 1, phone: None });
+        let fingerprint = Fingerprint([7; 32]);
+        let announce = Discovery::Announce {
+            protocol: 1,
+            name: "PC".to_string(),
+            port: 1714,
+            fingerprint,
+            claim: false,
+        };
+        // Sin `claim`, igual que lo enviaba una versión anterior.
+        assert!(!serde_json::to_string(&announce).unwrap().contains("claim"));
+        let probe = Discovery::Probe {
+            protocol: 1,
+            phone: Some(ProbingPhone {
+                name: "Móvil".to_string(),
+                fingerprint,
+                connected_to: Some("Laptop".to_string()),
+            }),
+        };
+        let text = serde_json::to_string(&probe).unwrap();
+        assert_eq!(serde_json::from_str::<Discovery>(&text).unwrap(), probe);
     }
 
     #[test]

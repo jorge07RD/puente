@@ -139,6 +139,10 @@ impl DesktopActions for Integration {
         });
     }
 
+    fn open_file(&self, path: &str) {
+        open_with_system(PathBuf::from(path));
+    }
+
     fn send_files(&self, paths: Vec<PathBuf>) {
         for path in paths {
             let _ = self.outbox.send(path);
@@ -225,6 +229,21 @@ fn upload(
             }
         }
     }
+}
+
+/// Lo abre el programa que el escritorio tenga asociado a ese tipo de archivo.
+fn open_with_system(path: PathBuf) {
+    #[cfg(windows)]
+    let mut command = std::process::Command::new("explorer");
+    #[cfg(not(windows))]
+    let mut command = std::process::Command::new("xdg-open");
+    command.arg(path);
+    // Se espera en otro hilo para no dejar el proceso como zombi ni frenar la ventana.
+    std::thread::spawn(move || {
+        if let Err(error) = command.status() {
+            eprintln!("no se pudo abrir el archivo: {error}");
+        }
+    });
 }
 
 fn progress(sent: u64, size: u64) -> f32 {

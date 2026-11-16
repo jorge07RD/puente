@@ -68,4 +68,7 @@ object Native {
     external fun fileChunk(id: Int, data: ByteArray): Boolean
 
     external fun endFile(id: Int, success: Boolean)
+
+    /** Un archivo recibido ya está guardado en `location`, listo para abrirlo. */
+    external fun onFileSaved(name: String, location: String)
 }

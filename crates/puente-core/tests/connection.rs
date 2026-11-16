@@ -743,3 +743,117 @@ async fn oversized_frames_are_refused_before_allocating() {
     far.write_all(&u32::MAX.to_be_bytes()).await.unwrap();
     assert!(matches!(read_message(&mut near).await, Err(Error::Protocol(_))));
 }
+
+/// Un móvil y dos PCs, cada una en su puerto, como dos máquinas en la misma red.
+fn phone_seeing(dir: &Path, ports: &[u16]) -> Engine {
+    let mut config = Config::new(Role::Phone, dir.to_path_buf(), "Phone".to_string());
+    config.port = ports[0];
+    config.probe_targets = ports.iter().map(|port| SocketAddr::from(([127, 0, 0, 1], *port))).collect();
+    Engine::start(config, || {}).unwrap()
+}
+
+fn desktop_named(dir: &Path, port: u16, name: &str) -> Engine {
+    let mut config = Config::new(Role::Desktop, dir.to_path_buf(), name.to_string());
+    config.port = port;
+    Engine::start(config, || {}).unwrap()
+}
+
+fn connected_to(view: &View, name: &str) -> bool {
+    matches!(&view.status, Status::Connected { name: other } if other == name)
+}
+
+#[test]
+fn the_phone_moves_between_two_desktops_from_any_side() {
+    let office_dir = tempfile::tempdir().unwrap();
+    let laptop_dir = tempfile::tempdir().unwrap();
+    let phone_dir = tempfile::tempdir().unwrap();
+    let (office_port, laptop_port) = (free_port(), free_port());
+    let ports = [office_port, laptop_port];
+
+    // Se empareja cada PC por separado.
+    let office = desktop_named(office_dir.path(), office_port, "Oficina");
+    let phone = phone_seeing(phone_dir.path(), &ports);
+    pair(&office, &phone);
+    let office_fingerprint = office.fingerprint();
+    drop(office);
+    wait_for(&phone, "que el móvil note el corte", |v| !connected(v));
+
+    let laptop = desktop_named(laptop_dir.path(), laptop_port, "Laptop");
+    let found = wait_for(&phone, "la laptop", |v| v.found.iter().any(|f| f.name == "Laptop"));
+    let laptop_found = found.found.iter().find(|f| f.name == "Laptop").unwrap();
+    phone.connect(laptop_found.fingerprint);
+    let code = wait_for(&phone, "código en el móvil", |v| pairing_code(v).is_some());
+    wait_for(&laptop, "código en la laptop", |v| pairing_code(v) == pairing_code(&code));
+    laptop.answer_pairing(true);
+    phone.answer_pairing(true);
+    let view = wait_for(&phone, "conexión con la laptop", |v| connected_to(v, "Laptop"));
+    assert_eq!(view.preferred_desktop, Some(laptop.fingerprint()));
+
+    // Vuelve la oficina: el móvil se queda con la laptop, que es la elegida, y se lo cuenta.
+    let office = desktop_named(office_dir.path(), office_port, "Oficina");
+    let view = wait_for(&laptop, "la oficina en la lista", |v| !v.other_desktops.is_empty());
+    assert_eq!(view.other_desktops[0].fingerprint, office_fingerprint);
+    let view = wait_for(&office, "el móvil cerca", |v| v.nearby_phone.is_some());
+    assert_eq!(view.nearby_phone.unwrap().connected_to.as_deref(), Some("Laptop"));
+    assert!(connected_to(&phone.view(), "Laptop"));
+
+    // Desde la PC conectada: pasar el móvil a la otra.
+    laptop.switch_desktop(office_fingerprint);
+    wait_for(&office, "conexión en la oficina", connected);
+    let view = wait_for(&phone, "el móvil en la oficina", |v| connected_to(v, "Oficina"));
+    assert_eq!(view.preferred_desktop, Some(office_fingerprint));
+
+    // Desde la PC libre: pedir que el móvil venga.
+    wait_for(&laptop, "el móvil cerca de la laptop", |v| v.nearby_phone.is_some());
+    laptop.claim_phone();
+    wait_for(&laptop, "conexión en la laptop", |v| connected(v) && !v.claiming);
+    wait_for(&phone, "el móvil en la laptop", |v| connected_to(v, "Laptop"));
+
+    // Desde el móvil.
+    phone.switch_desktop(office_fingerprint);
+    wait_for(&phone, "el móvil otra vez en la oficina", |v| connected_to(v, "Oficina"));
+    wait_for(&laptop, "la laptop libre", |v| !connected(v));
+}
+
+#[test]
+fn received_files_wait_to_be_opened_and_the_phone_sees_what_it_sent() {
+    let desktop_dir = tempfile::tempdir().unwrap();
+    let phone_dir = tempfile::tempdir().unwrap();
+    let port = free_port();
+    let desktop = engine(Role::Desktop, desktop_dir.path(), port);
+    let phone = engine(Role::Phone, phone_dir.path(), port);
+    pair(&desktop, &phone);
+
+    // Del móvil a la PC: queda en la lista de la PC con su ruta, y el móvil ve que llegó.
+    let id = phone.begin_file("nota.txt", 3).unwrap();
+    assert!(phone.send_file_chunk(id, b"abc".to_vec()));
+    phone.end_file(id, true);
+    let view = wait_for(&desktop, "el archivo en la lista de la PC", |v| !v.received.is_empty());
+    let file = &view.received[0];
+    assert_eq!(file.name, "nota.txt");
+    assert_eq!(std::fs::read(&file.location).unwrap(), b"abc");
+    let view = wait_for(&phone, "el envío confirmado en el móvil", |v| !v.sent.is_empty());
+    assert!(view.sent[0].delivered);
+    assert_eq!(view.sent[0].name, "nota.txt");
+
+    // Abrirlo lo saca de la lista.
+    assert_eq!(desktop.take_received(file.id).unwrap().name, "nota.txt");
+    assert!(desktop.view().received.is_empty());
+    assert!(desktop.take_received(file.id).is_none());
+
+    // De la PC al móvil: Android lo guarda y avisa de dónde quedó.
+    let id = desktop.begin_file("foto.jpg", 2).unwrap();
+    assert!(desktop.send_file_chunk(id, vec![1, 2]));
+    desktop.end_file(id, true);
+    let task = loop {
+        let task: serde_json::Value = serde_json::from_str(&phone.next_task(Duration::from_secs(5)).unwrap()).unwrap();
+        if task["command"] == "save_file" {
+            break task;
+        }
+    };
+    assert_eq!(task["name"], "foto.jpg");
+    phone.file_saved("foto.jpg".to_string(), "content://media/external/downloads/42".to_string());
+    let view = phone.view();
+    assert_eq!(view.received.len(), 1);
+    assert_eq!(view.received[0].location, "content://media/external/downloads/42");
+}

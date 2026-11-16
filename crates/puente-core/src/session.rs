@@ -23,10 +23,11 @@ pub struct Outgoing {
 
 /// Corre hasta que la conexión se corta o deja de responder. Lo recibido, salvo
 /// los mensajes de mantenimiento, se entrega a `on_frame`; `on_round_trip` recibe
-/// el tiempo que tarda en volver cada ping.
+/// el tiempo que tarda en volver cada ping. Un aviso en `leave` la cierra desde aquí.
 pub async fn run<S>(
     stream: S,
     outgoing: Outgoing,
+    leave: Arc<Notify>,
     mut on_frame: impl FnMut(Frame),
     mut on_round_trip: impl FnMut(Duration),
 ) -> Result<()>
@@ -76,6 +77,7 @@ where
     let result = loop {
         let received = tokio::select! {
             _ = closing.notified() => break Ok(()),
+            _ = leave.notified() => break Ok(()),
             received = timeout(DEAD_AFTER, read_frame(&mut reader)) => received,
         };
         let frame = match received {

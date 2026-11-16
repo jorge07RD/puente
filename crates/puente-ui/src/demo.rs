@@ -132,6 +132,8 @@ struct SampleDesktop {
 impl DesktopActions for SampleDesktop {
     fn pick_and_send_file(&self) {}
 
+    fn open_file(&self, _path: &str) {}
+
     fn send_files(&self, _paths: Vec<PathBuf>) {}
 
     fn transfer(&self) -> Option<Transfer> {
@@ -167,6 +169,10 @@ impl PhoneActions for SamplePhone {
     fn open_battery_settings(&self) {}
 
     fn scan_code(&self) {}
+
+    fn pick_files(&self) {}
+
+    fn open_file(&self, _location: &str) {}
 
     fn battery_unrestricted(&self) -> bool {
         true

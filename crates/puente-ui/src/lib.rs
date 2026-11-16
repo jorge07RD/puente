@@ -52,6 +52,10 @@ pub trait PhoneActions {
     fn open_battery_settings(&self);
     /// Abre el lector de códigos para escanear el QR que enseña la PC.
     fn scan_code(&self);
+    /// Abre el selector de archivos de Android para enviarlos a la PC.
+    fn pick_files(&self);
+    /// Abre un archivo recibido, con la dirección `content://` donde lo guardó Android.
+    fn open_file(&self, location: &str);
     /// Android tiene permitido no dormir la app en segundo plano.
     fn battery_unrestricted(&self) -> bool;
     /// Píxeles que ocupan arriba y abajo las barras del sistema.
@@ -77,6 +81,8 @@ pub struct RecentFile {
 /// PC: acciones que dependen del escritorio.
 pub trait DesktopActions {
     fn pick_and_send_file(&self);
+    /// Abre un archivo recibido con el programa que el sistema tenga para él.
+    fn open_file(&self, path: &str);
     fn send_files(&self, paths: Vec<PathBuf>);
     /// El archivo que se está enviando ahora, si hay alguno.
     fn transfer(&self) -> Option<Transfer>;
