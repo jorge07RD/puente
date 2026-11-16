@@ -61,7 +61,8 @@ No Linux, ter o celular à mão costuma exigir duas ferramentas: o **KDE Connect
 | **Som** | Ouvir o celular no PC | Com um botão para desativar, e outro para silenciar o celular durante a transmissão |
 | **Notificações** | Na área de trabalho | Dá para dispensá-las uma a uma ou todas de uma vez e, se o app permitir, responder pelo PC. O sino escolhe se aparecem como notificação do PC, só na lista ou desligadas |
 | **Chamadas** | Ver quem está ligando | Aviso no PC, também para chamadas de outros apps. Atender pelo PC ainda não funciona no WhatsApp |
-| **Arquivos** | Enviar nos dois sentidos | Arrastando para a janela, com progresso e confirmação de que foram salvos |
+| **Arquivos** | Enviar nos dois sentidos | Arrastando para a janela ou com **Enviar arquivo** no celular, com progresso e confirmação de que foram salvos. O que chega fica com um botão **Abrir** até você abrir ou passar uma hora |
+| **Vários PCs** | Escolher a qual conectar | O celular volta ao último PC usado. Com outro PC pareado na rede, troque pelo celular, pelo PC conectado ou pelo livre com **Conectar aqui** |
 | **Área de transferência** | Copiar e colar entre dispositivos | Automática do PC para o celular |
 | **Música** | Controlar o que está tocando | Tocar, pausar, anterior e próxima |
 | **Bateria** | Nível e carga | Anel de pontos animado enquanto carrega |
