@@ -61,7 +61,8 @@ On Linux, keeping your phone at hand usually takes two tools: **KDE Connect** fo
 | **Sound** | Hear the phone on the PC | With a switch to turn it off, and another to mute the phone while streaming |
 | **Notifications** | On your desktop | Dismiss them one by one or all at once and, if the app allows it, reply from the PC. The bell chooses whether they show as PC notifications, only in the list, or not at all |
 | **Calls** | See who is calling | Alert on the PC, also for calls from other apps. Answering from the PC does not work with WhatsApp yet |
-| **Files** | Send both ways | By dragging onto the window, with progress and confirmation that they were saved |
+| **Files** | Send both ways | By dragging onto the window or with **Send file** on the phone, with progress and confirmation that they were saved. Received files keep an **Open** button until you open them or an hour goes by |
+| **Several PCs** | Choose which one to use | The phone goes back to the last PC it used. With another paired PC on the network, switch from the phone, from the connected PC, or from the idle one with **Connect here** |
 | **Clipboard** | Copy and paste between devices | Automatic from the PC to the phone |
 | **Music** | Control what is playing | Play, pause, previous and next |
 | **Battery** | Level and charging | Animated ring of dots while charging |
