@@ -2,6 +2,7 @@ package dev.puente.app
 
 import android.Manifest
 import android.app.NativeActivity
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
@@ -16,6 +17,7 @@ import android.widget.Toast
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
+import kotlin.concurrent.thread
 import kotlin.system.exitProcess
 
 class MainActivity : NativeActivity() {
@@ -114,6 +116,51 @@ class MainActivity : NativeActivity() {
             }
     }
 
+    /** Llamado desde Rust. */
+    fun pickFiles() = runOnUiThread {
+        val picker = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("*/*")
+            .putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+        startActivityForResult(picker, REQUEST_FILES)
+    }
+
+    /** Llamado desde Rust, con la dirección donde se guardó un archivo recibido. */
+    fun openFile(location: String) = runOnUiThread {
+        val uri = Uri.parse(location)
+        val view = Intent(Intent.ACTION_VIEW)
+            .setDataAndType(uri, contentResolver.getType(uri) ?: "*/*")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        try {
+            startActivity(view)
+        } catch (error: ActivityNotFoundException) {
+            Native.log("no hay app para abrir el archivo: $error")
+            Toast.makeText(this, R.string.open_failed, Toast.LENGTH_LONG).show()
+        } catch (error: SecurityException) {
+            Native.log("no se pudo abrir el archivo: $error")
+            Toast.makeText(this, R.string.open_failed, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** Envía lo elegido en el selector. El permiso de lectura dura lo que esta actividad. */
+    private fun sendPicked(data: Intent) {
+        val clips = data.clipData
+        val picked = if (clips != null) {
+            (0 until clips.itemCount).map { clips.getItemAt(it).uri }
+        } else {
+            listOfNotNull(data.data)
+        }
+        if (picked.isEmpty()) return
+        Toast.makeText(this, PhoneTexts.sending, Toast.LENGTH_SHORT).show()
+        thread(name = "puente-enviar") {
+            val allSent = picked.map { FileSender.send(contentResolver, it) }.all { it }
+            runOnUiThread {
+                val message = if (allSent) PhoneTexts.sent else PhoneTexts.sendFailed
+                Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     private fun askForCapture() {
         val manager = getSystemService(MediaProjectionManager::class.java)
         startActivityForResult(manager.createScreenCaptureIntent(), REQUEST_CAPTURE)
@@ -136,6 +183,9 @@ class MainActivity : NativeActivity() {
         if (requestCode == REQUEST_CAPTURE && resultCode == RESULT_OK && data != null) {
             startForegroundService(MirrorService.startIntent(this, resultCode, data))
         }
+        if (requestCode == REQUEST_FILES && resultCode == RESULT_OK && data != null) {
+            sendPicked(data)
+        }
     }
 
     /** La pantalla en Rust solo se puede crear una vez por proceso. */
@@ -155,6 +205,7 @@ class MainActivity : NativeActivity() {
     private companion object {
         const val REQUEST_CAPTURE = 1
         const val REQUEST_PERMISSIONS = 2
+        const val REQUEST_FILES = 3
 
         private var uiStarted = false
     }

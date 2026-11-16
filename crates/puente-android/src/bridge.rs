@@ -42,6 +42,20 @@ impl ActivityActions {
             log::error!("falló la llamada a {method}: {error}");
         }
     }
+
+    fn call_with_text(&self, method: &str, value: &str) {
+        let Ok(mut env) = self.vm.attach_current_thread() else {
+            log::error!("no se pudo acceder a la VM de Java");
+            return;
+        };
+        let Ok(value) = env.new_string(value) else {
+            return;
+        };
+        let argument = JObject::from(value);
+        if let Err(error) = env.call_method(&self.activity, method, "(Ljava/lang/String;)V", &[(&argument).into()]) {
+            log::error!("falló la llamada a {method}: {error}");
+        }
+    }
 }
 
 impl PhoneActions for ActivityActions {
@@ -67,6 +81,14 @@ impl PhoneActions for ActivityActions {
 
     fn scan_code(&self) {
         self.call("scanCode");
+    }
+
+    fn pick_files(&self) {
+        self.call("pickFiles");
+    }
+
+    fn open_file(&self, location: &str) {
+        self.call_with_text("openFile", location);
     }
 
     fn battery_unrestricted(&self) -> bool {
@@ -357,6 +379,21 @@ pub extern "system" fn Java_dev_puente_app_Native_endFile(
 ) {
     if let (Some(engine), Ok(id)) = (running_engine(), u32::try_from(id)) {
         engine.end_file(id, success != JNI_FALSE);
+    }
+}
+
+/// Android guardó un archivo recibido en `location`; queda en la lista para abrirlo.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_puente_app_Native_onFileSaved(
+    mut env: JNIEnv,
+    _this: JObject,
+    name: JString,
+    location: JString,
+) {
+    let name = text(&mut env, &name);
+    let location = text(&mut env, &location);
+    if let Some(engine) = running_engine() {
+        engine.file_saved(name, location);
     }
 }
 

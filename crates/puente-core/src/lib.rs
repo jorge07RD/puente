@@ -12,7 +12,9 @@ pub mod tls;
 pub mod transfers;
 pub mod wire;
 
-pub use engine::{Config, DesktopEvent, Engine, FileNote, Found, Problem, Status, View};
+pub use engine::{
+    Config, DesktopEvent, Engine, FileNote, Found, NearbyPhone, Problem, ReceivedFile, SentFile, Status, View,
+};
 pub use settings::{LanguageChoice, NoticeMode, VideoQuality};
 pub use identity::{Fingerprint, Identity};
 pub use pairing::Role;

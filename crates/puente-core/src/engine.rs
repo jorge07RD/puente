@@ -6,13 +6,14 @@
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc as std_mpsc};
 use std::time::{Duration, Instant};
 
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tokio::runtime::Runtime;
-use tokio::sync::{Semaphore, mpsc, oneshot};
+use tokio::sync::{Notify, Semaphore, mpsc, oneshot};
 use tokio::time::{MissedTickBehavior, interval, timeout};
 
 use crate::pairing::{self, PairPrompt};
@@ -22,8 +23,8 @@ use crate::settings::{LanguageChoice, NoticeMode, SettingsFile, VideoQuality};
 use crate::telemetry::RateMeter;
 use crate::transfers::Incoming;
 use crate::wire::{
-    CallInfo, Discovery, Frame, Input, MediaInfo, Message, NotificationInfo, PhoneCommand, ReplyOutcome,
-    VideoPacket,
+    CallInfo, DesktopInfo, Discovery, Frame, Input, MediaInfo, Message, NotificationInfo, PhoneCommand,
+    ProbingPhone, ReplyOutcome, VideoPacket,
 };
 use crate::{Error, Fingerprint, Identity, PROTOCOL_VERSION, Peer, PeerStore, Result, Role, session};
 
@@ -33,6 +34,18 @@ const LOCAL_IP_EVERY: Duration = Duration::from_secs(5);
 /// Cuánto vale la intención de conectar con una dirección escrita o escaneada.
 const WANTED_FOR: Duration = Duration::from_secs(30);
 const FOUND_EXPIRES: Duration = Duration::from_secs(10);
+/// Al arrancar, cuánto se espera a la PC elegida antes de conectar con otra emparejada.
+const PREFERRED_GRACE: Duration = Duration::from_secs(8);
+/// PC: cuánto dura el aviso de que el móvil está en la red sin un nuevo sondeo.
+const NEARBY_EXPIRES: Duration = Duration::from_secs(10);
+/// PC: cuánto se sigue pidiendo al móvil que venga.
+const CLAIM_FOR: Duration = Duration::from_secs(10);
+/// Cuánto espera un archivo recibido a que se abra antes de salir de la lista.
+pub const RECEIVED_FOR: Duration = Duration::from_secs(60 * 60);
+const MAX_RECEIVED: usize = 20;
+/// Móvil: cuánto se ve cada envío terminado.
+pub const SENT_FOR: Duration = Duration::from_secs(12);
+const MAX_SENT: usize = 10;
 /// Pocos paquetes en cola: si la red se atrasa es mejor saltar que acumular retraso.
 const VIDEO_QUEUE: usize = 8;
 const DECODER_QUEUE: usize = 16;
@@ -84,6 +97,33 @@ pub struct Found {
     pub fingerprint: Fingerprint,
     pub address: SocketAddr,
     pub paired: bool,
+}
+
+/// PC: un móvil emparejado que pregunta en la red mientras esta PC no tiene conexión.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NearbyPhone {
+    pub name: String,
+    pub fingerprint: Fingerprint,
+    /// La PC con la que está conectado ahora, si hay una.
+    pub connected_to: Option<String>,
+}
+
+/// Un archivo recibido que aún no se ha abierto.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReceivedFile {
+    pub id: u64,
+    pub name: String,
+    /// PC: la ruta en disco. Móvil: la dirección `content://` donde lo guardó Android.
+    pub location: String,
+    pub at: Instant,
+}
+
+/// Móvil: un envío terminado, con lo que contestó la PC.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SentFile {
+    pub name: String,
+    pub delivered: bool,
+    pub at: Instant,
 }
 
 /// Lo último que pasó con los archivos recibidos. La interfaz lo traduce.
@@ -155,6 +195,20 @@ pub struct View {
     pub call: Option<CallInfo>,
     /// PC: resultado de la última respuesta enviada.
     pub last_reply: Option<ReplyOutcome>,
+    /// El dispositivo conectado, mientras hay conexión.
+    pub peer: Option<Fingerprint>,
+    /// PC: las otras PCs emparejadas que ve el móvil, a las que se puede pasar.
+    pub other_desktops: Vec<DesktopInfo>,
+    /// PC: el móvil está en la red, pero no conectado aquí.
+    pub nearby_phone: Option<NearbyPhone>,
+    /// PC: se le está pidiendo al móvil que venga.
+    pub claiming: bool,
+    /// Móvil: la PC elegida, con la que conecta primero.
+    pub preferred_desktop: Option<Fingerprint>,
+    /// Archivos recibidos sin abrir, del más reciente al más antiguo.
+    pub received: Vec<ReceivedFile>,
+    /// Móvil: envíos terminados hace poco, del más reciente al más antiguo.
+    pub sent: Vec<SentFile>,
 }
 
 /// PC: lo que hay que reflejar en el escritorio.
@@ -179,6 +233,8 @@ enum Command {
 
 struct SessionHandle {
     peer: Fingerprint,
+    /// Cierra la sesión desde este lado, para pasarse a otra PC.
+    leave: Arc<Notify>,
     control: mpsc::Sender<Message>,
     video: mpsc::Sender<VideoPacket>,
     audio: mpsc::Sender<Vec<u8>>,
@@ -233,6 +289,19 @@ struct Shared {
     phone_log: PathBuf,
     settings: Mutex<SettingsFile>,
     next_file_id: AtomicU32,
+    /// Móvil: hay un cambio de PC en curso; al acabar el intento actual se busca enseguida.
+    switching: AtomicBool,
+    /// Móvil: despierta la búsqueda para conectar ya con la PC elegida.
+    wake: Notify,
+    /// Móvil: la última lista de otras PCs enviada a la conectada.
+    reported_desktops: Mutex<Option<Vec<DesktopInfo>>>,
+    /// PC: cuándo se oyó por última vez al móvil emparejado que no está conectado aquí.
+    nearby_seen: Mutex<Option<Instant>>,
+    /// PC: hasta cuándo se le pide al móvil que venga.
+    claim_until: Mutex<Option<Instant>>,
+    next_received_id: AtomicU64,
+    /// Móvil: nombre de cada envío en curso, hasta que la PC confirma que lo guardó.
+    outgoing: Mutex<HashMap<u32, String>>,
     repaint: Box<dyn Fn() + Send + Sync>,
 }
 
@@ -249,6 +318,146 @@ impl Shared {
             let _ = settings.save();
         }
         self.update(|view| view.manual_ip = ip);
+    }
+
+    fn add_received(&self, name: String, location: String) {
+        let file = ReceivedFile {
+            id: self.next_received_id.fetch_add(1, Ordering::SeqCst),
+            name,
+            location,
+            at: Instant::now(),
+        };
+        self.update(|view| {
+            view.received.insert(0, file);
+            view.received.truncate(MAX_RECEIVED);
+        });
+    }
+
+    /// Móvil: la PC contestó sobre un envío nuestro.
+    fn finish_sending(&self, id: u32, delivered: bool) {
+        if self.role != Role::Phone {
+            return;
+        }
+        let Some(name) = self.outgoing.lock().expect("envíos disponibles").remove(&id) else {
+            return;
+        };
+        let file = SentFile {
+            name,
+            delivered,
+            at: Instant::now(),
+        };
+        self.update(|view| {
+            view.sent.insert(0, file);
+            view.sent.truncate(MAX_SENT);
+        });
+    }
+
+    fn set_preferred(&self, fingerprint: Fingerprint) {
+        {
+            let mut settings = self.settings.lock().expect("ajustes disponibles");
+            if settings.current.preferred_desktop == Some(fingerprint) {
+                return;
+            }
+            settings.current.preferred_desktop = Some(fingerprint);
+            let _ = settings.save();
+        }
+        self.update(|view| view.preferred_desktop = Some(fingerprint));
+    }
+
+    fn session_peer(&self) -> Option<Fingerprint> {
+        self.session.lock().expect("sesión disponible").as_ref().map(|session| session.peer)
+    }
+
+    /// Móvil: deja la PC actual, si es otra, y conecta con esta, que pasa a ser la elegida.
+    fn switch_to(&self, fingerprint: Fingerprint) {
+        if self.role != Role::Phone || !self.is_paired(fingerprint) {
+            return;
+        }
+        self.set_preferred(fingerprint);
+        let session = self.session.lock().expect("sesión disponible");
+        if session.as_ref().is_some_and(|session| session.peer == fingerprint) {
+            return;
+        }
+        self.switching.store(true, Ordering::SeqCst);
+        match session.as_ref() {
+            Some(session) => session.leave.notify_one(),
+            None if !self.attempt_active.load(Ordering::SeqCst) => self.wake.notify_one(),
+            // Conectando o emparejando: se busca al terminar ese intento.
+            None => {}
+        }
+    }
+
+    /// Móvil: cuenta a la PC conectada qué otras PCs emparejadas hay en la red.
+    fn report_desktops(&self) {
+        let Some(peer) = self.session_peer() else {
+            return;
+        };
+        let list: Vec<DesktopInfo> = self
+            .view
+            .lock()
+            .expect("vista disponible")
+            .found
+            .iter()
+            .filter(|found| found.paired && found.fingerprint != peer)
+            .map(|found| DesktopInfo {
+                name: found.name.clone(),
+                fingerprint: found.fingerprint,
+            })
+            .collect();
+        {
+            let mut reported = self.reported_desktops.lock().expect("lista disponible");
+            if reported.as_ref() == Some(&list) {
+                return;
+            }
+            *reported = Some(list.clone());
+        }
+        self.send_control(Message::OtherDesktops { list });
+    }
+
+    /// PC: el móvil emparejado preguntó en la red mientras esta PC no tiene conexión.
+    fn heard_phone(&self, phone: ProbingPhone) {
+        if self.session_peer().is_some() || !self.is_paired(phone.fingerprint) {
+            return;
+        }
+        *self.nearby_seen.lock().expect("reloj disponible") = Some(Instant::now());
+        let nearby = NearbyPhone {
+            name: phone.name,
+            fingerprint: phone.fingerprint,
+            connected_to: phone.connected_to,
+        };
+        let changed = self.view.lock().expect("vista disponible").nearby_phone.as_ref() != Some(&nearby);
+        if changed {
+            self.update(|view| view.nearby_phone = Some(nearby));
+        }
+    }
+
+    fn claiming(&self) -> bool {
+        self.claim_until
+            .lock()
+            .expect("reloj disponible")
+            .is_some_and(|until| Instant::now() < until)
+    }
+
+    fn stop_claiming(&self) {
+        *self.claim_until.lock().expect("reloj disponible") = None;
+        if self.view.lock().expect("vista disponible").claiming {
+            self.update(|view| view.claiming = false);
+        }
+    }
+
+    /// PC: borra el aviso del móvil y la petición cuando ya no valen.
+    fn expire_nearby(&self) {
+        let stale = self
+            .nearby_seen
+            .lock()
+            .expect("reloj disponible")
+            .is_none_or(|seen| seen.elapsed() >= NEARBY_EXPIRES);
+        if stale && self.view.lock().expect("vista disponible").nearby_phone.is_some() {
+            self.update(|view| view.nearby_phone = None);
+        }
+        if !self.claiming() {
+            self.stop_claiming();
+        }
     }
 
     fn paired(&self) -> Vec<Peer> {
@@ -347,8 +556,11 @@ impl Shared {
             Message::FileDone { id } => self.on_file_done(id, state),
             Message::FileFailed { id } => {
                 // Si no se estaba recibiendo, es un envío nuestro que el otro lado rechazó.
-                if !state.incoming.fail(id) && self.role == Role::Desktop {
-                    let _ = self.desktop_out.send(DesktopEvent::FileFailed(id));
+                if !state.incoming.fail(id) {
+                    if self.role == Role::Desktop {
+                        let _ = self.desktop_out.send(DesktopEvent::FileFailed(id));
+                    }
+                    self.finish_sending(id, false);
                 }
                 self.update(|view| view.last_file = Some(FileNote::SendFailed));
             }
@@ -356,11 +568,18 @@ impl Shared {
                 if self.role == Role::Desktop {
                     let _ = self.desktop_out.send(DesktopEvent::FileDelivered(id));
                 }
+                self.finish_sending(id, true);
             }
             Message::Clipboard { text } => self.on_clipboard(text),
             Message::Unpair => {
                 let _ = self.forget_peer(state.peer);
             }
+            Message::OtherDesktops { list } => {
+                if self.role == Role::Desktop {
+                    self.update(|view| view.other_desktops = list);
+                }
+            }
+            Message::SwitchDesktop { fingerprint } => self.switch_to(fingerprint),
             other => match self.role {
                 Role::Desktop => self.on_phone_report(other),
                 Role::Phone => {
@@ -398,6 +617,7 @@ impl Shared {
         self.send_control(Message::FileSaved { id });
         match self.role {
             Role::Desktop => {
+                self.add_received(received.name.clone(), received.path.to_string_lossy().into_owned());
                 let _ = self
                     .desktop_out
                     .send(DesktopEvent::FileReceived(received.path, received.name.clone()));
@@ -552,6 +772,13 @@ impl Engine {
             peer_version: None,
             call: None,
             last_reply: None,
+            peer: None,
+            other_desktops: Vec::new(),
+            nearby_phone: None,
+            claiming: false,
+            preferred_desktop: settings.current.preferred_desktop,
+            received: Vec::new(),
+            sent: Vec::new(),
         };
         let (task_out, task_receiver) = std_mpsc::sync_channel(TASK_QUEUE);
         let (audio_in, audio_receiver) = std_mpsc::sync_channel(AUDIO_QUEUE);
@@ -581,6 +808,13 @@ impl Engine {
             phone_log: config.data_dir.join("phone.log"),
             settings: Mutex::new(settings),
             next_file_id: AtomicU32::new(1),
+            switching: AtomicBool::new(false),
+            wake: Notify::new(),
+            reported_desktops: Mutex::new(None),
+            nearby_seen: Mutex::new(None),
+            claim_until: Mutex::new(None),
+            next_received_id: AtomicU64::new(1),
+            outgoing: Mutex::new(HashMap::new()),
             repaint: Box::new(repaint),
         });
 
@@ -633,12 +867,50 @@ impl Engine {
     }
 
     pub fn view(&self) -> View {
-        self.shared.view.lock().expect("vista disponible").clone()
+        let mut view = self.shared.view.lock().expect("vista disponible");
+        // Lo que lleva mucho tiempo sin abrirse ya no se busca aquí.
+        view.received.retain(|file| file.at.elapsed() < RECEIVED_FOR);
+        view.sent.retain(|file| file.at.elapsed() < SENT_FOR);
+        view.clone()
+    }
+
+    /// Saca de la lista un archivo recibido para abrirlo. Una vez abierto ya no se enseña.
+    pub fn take_received(&self, id: u64) -> Option<ReceivedFile> {
+        let mut taken = None;
+        self.shared.update(|view| {
+            if let Some(index) = view.received.iter().position(|file| file.id == id) {
+                taken = Some(view.received.remove(index));
+            }
+        });
+        taken
+    }
+
+    /// Móvil: Android terminó de guardar un archivo recibido en `location`.
+    pub fn file_saved(&self, name: String, location: String) {
+        self.shared.add_received(name, location);
     }
 
     /// El móvil inicia la conexión con una PC encontrada.
     pub fn connect(&self, fingerprint: Fingerprint) {
         let _ = self.commands.send(Command::Connect(fingerprint));
+    }
+
+    /// Pasa el móvil a otra PC emparejada. En el móvil lo hace él mismo; en la PC conectada
+    /// se lo pide al móvil, que es quien ve todas las PCs.
+    pub fn switch_desktop(&self, fingerprint: Fingerprint) {
+        match self.shared.role {
+            Role::Phone => self.shared.switch_to(fingerprint),
+            Role::Desktop => self.shared.send_control(Message::SwitchDesktop { fingerprint }),
+        }
+    }
+
+    /// PC sin conexión: pide al móvil emparejado que está en la red que se pase aquí.
+    pub fn claim_phone(&self) {
+        if self.shared.role != Role::Desktop {
+            return;
+        }
+        *self.shared.claim_until.lock().expect("reloj disponible") = Some(Instant::now() + CLAIM_FOR);
+        self.shared.update(|view| view.claiming = true);
     }
 
     /// Responde al código que se está mostrando.
@@ -953,6 +1225,13 @@ impl Engine {
         self.files_sender()?
             .blocking_send(Frame::Control(offer))
             .ok()?;
+        if self.shared.role == Role::Phone {
+            self.shared
+                .outgoing
+                .lock()
+                .expect("envíos disponibles")
+                .insert(id, name.to_string());
+        }
         Some(id)
     }
 
@@ -970,6 +1249,9 @@ impl Engine {
         if let Some(files) = self.files_sender() {
             let _ = files.blocking_send(Frame::Control(message));
         }
+        if !success {
+            self.shared.finish_sending(id, false);
+        }
     }
 
     pub fn forget(&self, fingerprint: Fingerprint) -> Result<()> {
@@ -978,13 +1260,15 @@ impl Engine {
 }
 
 async fn answer_probes(shared: Arc<Shared>, socket: UdpSocket, port: u16) {
-    let announce = Discovery::Announce {
+    let announce = |claim| Discovery::Announce {
         protocol: PROTOCOL_VERSION,
         name: shared.identity.name.clone(),
         port,
         fingerprint: shared.identity.fingerprint,
+        claim,
     };
-    let Ok(reply) = serde_json::to_vec(&announce) else {
+    let (Ok(reply), Ok(claim_reply)) = (serde_json::to_vec(&announce(false)), serde_json::to_vec(&announce(true)))
+    else {
         return;
     };
 
@@ -993,13 +1277,18 @@ async fn answer_probes(shared: Arc<Shared>, socket: UdpSocket, port: u16) {
         let Ok((length, source)) = socket.recv_from(&mut buffer).await else {
             continue;
         };
-        let is_probe = matches!(
-            serde_json::from_slice(&buffer[..length]),
-            Ok(Discovery::Probe { protocol: PROTOCOL_VERSION })
-        );
-        if is_probe {
-            let _ = socket.send_to(&reply, source).await;
+        let Ok(Discovery::Probe { protocol: PROTOCOL_VERSION, phone }) = serde_json::from_slice(&buffer[..length])
+        else {
+            continue;
+        };
+        // La petición solo va al móvil emparejado: a otro no le sirve de nada.
+        let claim = phone
+            .as_ref()
+            .is_some_and(|phone| shared.claiming() && shared.is_paired(phone.fingerprint));
+        if let Some(phone) = phone {
+            shared.heard_phone(phone);
         }
+        let _ = socket.send_to(if claim { &claim_reply } else { &reply }, source).await;
     }
 }
 
@@ -1042,6 +1331,7 @@ async fn watch_local_ip(shared: Arc<Shared>) {
     ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
     loop {
         ticker.tick().await;
+        shared.expire_nearby();
         let ips = local_ips();
         let changed = shared.view.lock().expect("vista disponible").local_ips != ips;
         if changed {
@@ -1082,11 +1372,7 @@ async fn search_for_desktop(
     port: u16,
     targets: Vec<SocketAddr>,
 ) {
-    let Ok(probe) = serde_json::to_vec(&Discovery::Probe {
-        protocol: PROTOCOL_VERSION,
-    }) else {
-        return;
-    };
+    let started = Instant::now();
     let mut seen: Vec<(Found, Instant)> = Vec::new();
     // La dirección recién pedida a mano: si responde, se conecta sin más toques.
     let mut wanted: Option<(Vec<IpAddr>, Instant)> = None;
@@ -1099,9 +1385,10 @@ async fn search_for_desktop(
             _ = ticker.tick() => {
                 seen.retain(|(_, at)| at.elapsed() < FOUND_EXPIRES);
                 publish_found(&shared, &seen);
-                if shared.attempt_active.load(Ordering::SeqCst) {
-                    continue;
-                }
+                connect_to_best(&shared, &seen, started);
+                // También con conexión: así se sabe qué otras PCs hay y una PC libre
+                // se entera de que el móvil está en la red.
+                let probe = probe_message(&shared);
                 for target in &targets {
                     let _ = socket.send_to(&probe, target).await;
                 }
@@ -1113,7 +1400,7 @@ async fn search_for_desktop(
             }
             received = socket.recv_from(&mut buffer) => {
                 let Ok((length, source)) = received else { continue };
-                let Ok(Discovery::Announce { protocol: PROTOCOL_VERSION, name, port, fingerprint }) =
+                let Ok(Discovery::Announce { protocol: PROTOCOL_VERSION, name, port, fingerprint, claim }) =
                     serde_json::from_slice(&buffer[..length]) else { continue };
                 let found = Found {
                     name,
@@ -1132,10 +1419,16 @@ async fn search_for_desktop(
                     // De las direcciones probadas, se guarda la que funcionó.
                     shared.save_manual_ip(Some(source.ip()));
                 }
-                if found.paired || asked_for {
+                if asked_for {
                     start_attempt(&shared, found);
+                    continue;
                 }
+                if claim && found.paired {
+                    shared.switch_to(fingerprint);
+                }
+                connect_to_best(&shared, &seen, started);
             }
+            () = shared.wake.notified() => connect_to_best(&shared, &seen, started),
             Some(command) = commands.recv() => match command {
                 Command::Connect(fingerprint) => {
                     let target = seen.iter().find(|(found, _)| found.fingerprint == fingerprint);
@@ -1144,6 +1437,7 @@ async fn search_for_desktop(
                     }
                 }
                 Command::Probe(ips) => {
+                    let probe = probe_message(&shared);
                     for ip in &ips {
                         let _ = socket.send_to(&probe, SocketAddr::new(*ip, port)).await;
                     }
@@ -1154,11 +1448,53 @@ async fn search_for_desktop(
     }
 }
 
+/// El sondeo lleva quién es el móvil y con qué PC está, para las PCs libres.
+fn probe_message(shared: &Shared) -> Vec<u8> {
+    let connected_to = match &shared.view.lock().expect("vista disponible").status {
+        Status::Connected { name } => Some(name.clone()),
+        _ => None,
+    };
+    let probe = Discovery::Probe {
+        protocol: PROTOCOL_VERSION,
+        phone: Some(ProbingPhone {
+            name: shared.identity.name.clone(),
+            fingerprint: shared.identity.fingerprint,
+            connected_to,
+        }),
+    };
+    serde_json::to_vec(&probe).unwrap_or_default()
+}
+
 fn publish_found(shared: &Shared, seen: &[(Found, Instant)]) {
     let found: Vec<Found> = seen.iter().map(|(found, _)| found.clone()).collect();
     let changed = shared.view.lock().expect("vista disponible").found != found;
     if changed {
         shared.update(|view| view.found = found);
+    }
+    shared.report_desktops();
+}
+
+/// Móvil sin conexión: conecta con la PC elegida si está en la red. Si no aparece, y tras
+/// darle tiempo a responder al arrancar, con cualquier otra emparejada.
+fn connect_to_best(shared: &Arc<Shared>, seen: &[(Found, Instant)], started: Instant) {
+    if shared.attempt_active.load(Ordering::SeqCst) {
+        return;
+    }
+    let preferred = shared.view.lock().expect("vista disponible").preferred_desktop;
+    let found: Vec<&Found> = seen.iter().map(|(found, _)| found).collect();
+    if let Some(found) = best_desktop(&found, preferred, started.elapsed() >= PREFERRED_GRACE) {
+        start_attempt(shared, found.clone());
+    }
+}
+
+fn best_desktop<'a>(found: &[&'a Found], preferred: Option<Fingerprint>, waited: bool) -> Option<&'a Found> {
+    let mut paired = found.iter().copied().filter(|found| found.paired);
+    match preferred {
+        Some(preferred) => {
+            let chosen = paired.clone().find(|found| found.fingerprint == preferred);
+            chosen.or_else(|| if waited { paired.next() } else { None })
+        }
+        None => paired.next(),
     }
 }
 
@@ -1176,6 +1512,9 @@ fn start_attempt(shared: &Arc<Shared>, found: Found) {
         let result = connect_to(&shared, &found).await;
         finish(&shared, result);
         shared.attempt_active.store(false, Ordering::SeqCst);
+        if shared.switching.swap(false, Ordering::SeqCst) {
+            shared.wake.notify_one();
+        }
     });
 }
 
@@ -1229,11 +1568,21 @@ async fn drive(shared: &Arc<Shared>, secure: Secure, address: SocketAddr) -> Res
         .expect("almacén disponible")
         .remember_ip(peer, address.ip())?;
     let paired = shared.paired();
+    match shared.role {
+        // La última PC usada es la elegida para la próxima vez.
+        Role::Phone => shared.set_preferred(peer),
+        Role::Desktop => {
+            shared.stop_claiming();
+            *shared.nearby_seen.lock().expect("reloj disponible") = None;
+        }
+    }
     shared.update(|view| {
         view.status = Status::Connected { name: greeting.name };
         view.peer_version = Some(greeting.version);
         view.paired = paired;
         view.last_error = None;
+        view.peer = Some(peer);
+        view.nearby_phone = None;
     });
 
     let (control, control_rx) = mpsc::channel(CONTROL_QUEUE);
@@ -1282,8 +1631,10 @@ async fn drive(shared: &Arc<Shared>, secure: Secure, address: SocketAddr) -> Res
             let _ = control.try_send(Message::Command(PhoneCommand::Quality { level: view.quality }));
         }
     }
+    let leave = Arc::new(Notify::new());
     *shared.session.lock().expect("sesión disponible") = Some(SessionHandle {
         peer,
+        leave: leave.clone(),
         control,
         video,
         audio,
@@ -1296,6 +1647,10 @@ async fn drive(shared: &Arc<Shared>, secure: Secure, address: SocketAddr) -> Res
         audio: audio_rx,
         files: files_rx,
     };
+    if shared.role == Role::Phone {
+        *shared.reported_desktops.lock().expect("lista disponible") = None;
+        shared.report_desktops();
+    }
     let events = shared.clone();
     let mut state = SessionState {
         peer,
@@ -1309,6 +1664,7 @@ async fn drive(shared: &Arc<Shared>, secure: Secure, address: SocketAddr) -> Res
     let _ = session::run(
         stream,
         outgoing,
+        leave,
         move |frame| events.on_frame(frame, &mut state),
         move |round_trip| {
             let milliseconds = u32::try_from(round_trip.as_millis()).unwrap_or(u32::MAX);
@@ -1319,6 +1675,8 @@ async fn drive(shared: &Arc<Shared>, secure: Secure, address: SocketAddr) -> Res
 
     *shared.session.lock().expect("sesión disponible") = None;
     shared.update(|view| {
+        view.peer = None;
+        view.other_desktops.clear();
         view.round_trip_ms = None;
         view.video_fps = None;
         view.video_mbps = None;
@@ -1366,4 +1724,32 @@ fn finish(shared: &Shared, result: Result<()>) {
             view.last_error = Some(Problem::from(&error));
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn desktop(byte: u8, paired: bool) -> Found {
+        Found {
+            name: format!("PC {byte}"),
+            fingerprint: Fingerprint([byte; 32]),
+            address: SocketAddr::from(([192, 168, 1, byte], crate::PORT)),
+            paired,
+        }
+    }
+
+    #[test]
+    fn the_chosen_desktop_wins_and_others_wait_for_it_at_first() {
+        let (office, laptop, stranger) = (desktop(1, true), desktop(2, true), desktop(3, false));
+        let both = [&office, &laptop, &stranger];
+        let chosen = Some(laptop.fingerprint);
+        assert_eq!(best_desktop(&both, chosen, false), Some(&laptop));
+        // Recién abierta la app, la elegida puede no haber respondido aún.
+        assert_eq!(best_desktop(&[&office], chosen, false), None);
+        assert_eq!(best_desktop(&[&office], chosen, true), Some(&office));
+        assert_eq!(best_desktop(&both, None, false), Some(&office));
+        // Nunca se conecta sola con una PC sin emparejar.
+        assert_eq!(best_desktop(&[&stranger], None, true), None);
+    }
 }

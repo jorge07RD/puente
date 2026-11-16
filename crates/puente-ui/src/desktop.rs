@@ -51,6 +51,7 @@ const SCREEN_RADIUS: u8 = 16;
 const SILENCE_LEVEL: f32 = 0.02;
 const NAVIGATION_WIDTH: f32 = 3.0 * 44.0 + 2.0 * 28.0;
 const TRANSFER_REFRESH: std::time::Duration = std::time::Duration::from_millis(100);
+const RECEIVED_REFRESH: std::time::Duration = std::time::Duration::from_secs(30);
 
 struct ReplyDraft {
     key: String,
@@ -337,11 +338,14 @@ fn draw_waiting(ui: &mut egui::Ui, area: Rect, frame: &Frame, status: Option<&st
     // Solo mientras se espera: conectando ya no hace falta decir dónde está la PC.
     let addresses: &[std::net::IpAddr] = if status.is_none() { &frame.view.local_ips } else { &[] };
     let shown = *address_shown && !addresses.is_empty();
+    const NEARBY_ROOM: f32 = 84.0;
+
+    let nearby = frame.view.nearby_phone.as_ref().filter(|_| status.is_none());
     let extra = match (addresses.is_empty(), shown) {
         (true, _) => 0.0,
         (false, false) => REVEAL_ROOM,
         (false, true) => REVEAL_ROOM + CODE_ROOM,
-    };
+    } + if nearby.is_some() { NEARBY_ROOM } else { 0.0 };
     let height = CONTENT_HEIGHT + extra;
     // Si la ventana es baja, el código es lo primero que sobra.
     let show_code = shown && area.height() >= height;
@@ -358,6 +362,9 @@ fn draw_waiting(ui: &mut egui::Ui, area: Rect, frame: &Frame, status: Option<&st
         ui.add_space(20.0);
 
         label(ui, status.unwrap_or(t().waiting_for_phone));
+        if let Some(nearby) = nearby {
+            draw_nearby_phone(ui, frame, nearby);
+        }
         if shown {
             let list: Vec<String> = addresses.iter().map(ToString::to_string).collect();
             ui.add_space(6.0);
@@ -395,6 +402,24 @@ fn draw_waiting(ui: &mut egui::Ui, area: Rect, frame: &Frame, status: Option<&st
             draw_paired(ui, frame);
         }
     });
+}
+
+/// El móvil emparejado está en la red, pero con otra PC: se le puede pedir que venga.
+fn draw_nearby_phone(ui: &mut egui::Ui, frame: &Frame, nearby: &puente_core::NearbyPhone) {
+    const BUTTON_HEIGHT: f32 = 36.0;
+
+    ui.add_space(14.0);
+    let text = match &nearby.connected_to {
+        Some(pc) => (t().phone_connected_to)(&nearby.name, pc),
+        None => (t().phone_on_network)(&nearby.name),
+    };
+    ui.add(egui::Label::new(RichText::new(text).color(INK)).truncate());
+    ui.add_space(8.0);
+    if frame.view.claiming {
+        label(ui, t().asking_phone);
+    } else if pill(ui, t().bring_here, BUTTON_HEIGHT, true).clicked() {
+        frame.engine.claim_phone();
+    }
 }
 
 /// El enlace como código QR: oscuro sobre claro y con margen, que es como lo leen
@@ -834,12 +859,19 @@ fn link_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame, name: &str) {
     const NAME_MIN_HEIGHT: f32 = 130.0;
     const HINT_MIN_HEIGHT: f32 = 20.0;
     const QUALITY_HEIGHT: f32 = 30.0;
+    const OTHER_HEIGHT: f32 = 26.0;
     let view = frame.view;
+    // Una sola fila: con dos PCs en casa, la otra es la única a la que pasar el móvil.
+    let other = view.other_desktops.first();
 
     card_full(ui, rect, "01", t().card_link, true, "", |ui| {
         // En tarjetas bajas el nombre cede su sitio para que las cifras quepan enteras.
         let show_name = ui.available_height() >= NAME_MIN_HEIGHT;
-        let reserved = STATS_HEIGHT + QUALITY_HEIGHT + 6.0 + if show_name { 30.0 } else { 8.0 };
+        let reserved = STATS_HEIGHT
+            + QUALITY_HEIGHT
+            + 6.0
+            + if show_name { 30.0 } else { 8.0 }
+            + if other.is_some() { OTHER_HEIGHT + 6.0 } else { 0.0 };
         let bridge_height = (ui.available_height() - reserved).clamp(26.0, 110.0);
         let (bridge, _) = ui.allocate_exact_size(vec2(ui.available_width(), bridge_height), Sense::hover());
         dots::paint_bridge(ui.painter(), bridge, frame.bridge);
@@ -870,11 +902,36 @@ fn link_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame, name: &str) {
         {
             frame.engine.set_quality(view.quality.next());
         }
+        if let Some(other) = other {
+            ui.add_space(6.0);
+            draw_other_desktop(ui, frame.engine, other, OTHER_HEIGHT);
+        }
         if !view.mirroring && ui.available_height() >= HINT_MIN_HEIGHT {
             ui.add_space(6.0);
             label(ui, t().share_from_phone);
         }
     });
+}
+
+/// Otra PC emparejada que el móvil ve en la red, con el botón para pasarle el móvil.
+fn draw_other_desktop(ui: &mut egui::Ui, engine: &Engine, other: &puente_core::wire::DesktopInfo, height: f32) {
+    let row = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), height));
+    ui.scope_builder(UiBuilder::new().max_rect(row).layout(Layout::right_to_left(Align::Center)), |ui| {
+        if pill(ui, t().move_phone, height, true)
+            .on_hover_text((t().move_phone_to)(&other.name))
+            .clicked()
+        {
+            engine.switch_desktop(other.fingerprint);
+        }
+        // El nombre es lo que importa; la frase entera no cabe en una tarjeta estrecha.
+        ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+            let (dot, _) = ui.allocate_exact_size(vec2(8.0, TEXT_LABEL), Sense::hover());
+            ui.painter().circle_filled(dot.center(), 3.0, ACCENT);
+            ui.add(egui::Label::new(RichText::new(&other.name).color(INK)).truncate())
+                .on_hover_text((t().also_on_network)(&other.name));
+        });
+    });
+    ui.advance_cursor_after_rect(row);
 }
 
 const HEADER_HEIGHT: f32 = 28.0;
@@ -1262,8 +1319,13 @@ fn files_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
     const BUTTON_HEIGHT: f32 = 32.0;
 
     let transfer = frame.actions.and_then(DesktopActions::transfer);
+    let received = &frame.view.received;
+    if !received.is_empty() {
+        // Para que los que caducan salgan aunque nada más cambie.
+        ui.ctx().request_repaint_after(RECEIVED_REFRESH);
+    }
 
-    card_full(ui, rect, "07", t().card_files, transfer.is_some(), "", |ui| {
+    card_full(ui, rect, "07", t().card_files, transfer.is_some() || !received.is_empty(), "", |ui| {
         let (space, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
         let zone = Rect::from_min_max(space.min, pos2(space.right(), space.bottom() - STATUS_HEIGHT));
         let status = Rect::from_min_max(pos2(space.left(), zone.bottom() + 4.0), space.max);
@@ -1271,7 +1333,7 @@ fn files_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
         let color = if frame.hovering_files { ACCENT } else { crate::theme::DOT_OFF };
         dots::paint_outline(ui.painter(), zone, 6.0, 2, color);
 
-        let has_list = !frame.recent_files.is_empty() && !frame.hovering_files;
+        let has_list = (!frame.recent_files.is_empty() || !received.is_empty()) && !frame.hovering_files;
         let button_center = if has_list {
             pos2(zone.center().x, zone.bottom() - ZONE_INSET - BUTTON_HEIGHT / 2.0)
         } else {
@@ -1287,7 +1349,9 @@ fn files_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
                     zone.min + Vec2::splat(ZONE_INSET),
                     pos2(zone.right() - ZONE_INSET, button_rect.top() - 4.0),
                 );
-                draw_recent_files(ui, list, &frame.recent_files);
+                let used = draw_received_files(ui, list, frame);
+                let rest = Rect::from_min_max(pos2(list.left(), list.top() + used), list.max);
+                draw_recent_files(ui, rest, &frame.recent_files);
             } else {
                 caption(ui, zone.center() - vec2(0.0, 16.0), t().drag_files_here);
             }
@@ -1318,6 +1382,48 @@ fn files_card(ui: &mut egui::Ui, rect: Rect, frame: &Frame) {
             }
         }
     });
+}
+
+/// Lo recibido del móvil, cada uno con su botón para abrirlo. Devuelve el alto usado.
+fn draw_received_files(ui: &mut egui::Ui, area: Rect, frame: &Frame) -> f32 {
+    const ROW: f32 = 28.0;
+    const BUTTON: f32 = 24.0;
+
+    let files = &frame.view.received;
+    if files.is_empty() {
+        return 0.0;
+    }
+    let rows = ((area.height() / ROW).floor() as usize).max(1);
+    let (shown, hidden) = if files.len() > rows { (rows - 1, files.len() - rows + 1) } else { (files.len(), 0) };
+    for (index, file) in files.iter().take(shown).enumerate() {
+        let row = Rect::from_min_size(area.min + vec2(0.0, index as f32 * ROW), vec2(area.width(), ROW));
+        ui.scope_builder(UiBuilder::new().max_rect(row).layout(Layout::right_to_left(Align::Center)), |ui| {
+            if pill(ui, t().open, BUTTON, true)
+                .on_hover_text((t().open_file)(&file.name))
+                .clicked()
+                && let Some(file) = frame.engine.take_received(file.id)
+                && let Some(actions) = frame.actions
+            {
+                actions.open_file(&file.location);
+            }
+            let name = displayable(ui, &file.name);
+            ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                ui.add(egui::Label::new(RichText::new(name).color(INK)).truncate());
+            });
+        });
+    }
+    if hidden > 0 {
+        let row = Rect::from_min_size(area.min + vec2(0.0, shown as f32 * ROW), vec2(area.width(), ROW));
+        ui.painter().text(
+            row.left_center(),
+            egui::Align2::LEFT_CENTER,
+            if shown == 0 { (t().file_count)(hidden) } else { (t().and_more)(hidden) },
+            egui::FontId::new(TEXT_LABEL, crate::theme::medium()),
+            INK_SOFT,
+        );
+        return (shown + 1) as f32 * ROW;
+    }
+    shown as f32 * ROW
 }
 
 /// Filas que caben, reservando una para avisar de las que no se ven.

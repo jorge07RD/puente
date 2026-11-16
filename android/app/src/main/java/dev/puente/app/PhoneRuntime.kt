@@ -168,5 +168,6 @@ internal object PhoneRuntime {
 
         resolver.update(uri, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
         source.delete()
+        Native.onFileSaved(name, uri.toString())
     }
 }

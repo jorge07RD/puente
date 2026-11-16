@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::Result;
+use crate::{Fingerprint, Result};
 
 /// Idioma de la interfaz. `Auto` sigue al del sistema.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -98,6 +98,8 @@ pub struct Settings {
     pub notices: NoticeMode,
     /// Móvil: dirección de la PC escrita a mano, para redes donde no se encuentra sola.
     pub manual_ip: Option<IpAddr>,
+    /// Móvil: la PC elegida. Si está en la red, se conecta con ella antes que con otras.
+    pub preferred_desktop: Option<Fingerprint>,
 }
 
 impl Default for Settings {
@@ -110,6 +112,7 @@ impl Default for Settings {
             quality: VideoQuality::Auto,
             notices: NoticeMode::On,
             manual_ip: None,
+            preferred_desktop: None,
         }
     }
 }

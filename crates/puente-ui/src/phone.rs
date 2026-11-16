@@ -360,6 +360,7 @@ fn draw_connected(
                 unpair_control(ui, engine, state);
             });
         });
+        draw_other_desktops(ui, engine, view);
     });
 
     let Some(phone) = phone else {
@@ -387,7 +388,9 @@ fn draw_connected(
         });
     });
 
-    card(ui, "03", t().card_permissions, false, |ui| {
+    draw_files_card(ui, engine, view, phone, "03");
+
+    card(ui, "04", t().card_permissions, false, |ui| {
         permission_row(ui, t().control_from_pc, view.input_enabled, || {
             phone.open_accessibility_settings();
         });
@@ -405,7 +408,7 @@ fn draw_connected(
         }
     });
 
-    card(ui, "04", t().card_settings, false, |ui| {
+    card(ui, "05", t().card_settings, false, |ui| {
         let animations = view.animations;
         if switch_row(ui, t().animations, animations, TOUCH).clicked() {
             engine.set_animations(!animations);
@@ -415,6 +418,67 @@ fn draw_connected(
             engine.set_language(language.next());
         }
     });
+}
+
+/// Lo recibido de la PC, para abrirlo con un toque, y el botón para enviar desde aquí.
+fn draw_files_card(ui: &mut egui::Ui, engine: &Engine, view: &View, phone: &dyn PhoneActions, index: &str) {
+    card(ui, index, t().card_files, !view.received.is_empty(), |ui| {
+        for file in &view.received {
+            ui.horizontal(|ui| {
+                ui.set_min_height(TOUCH);
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if pill(ui, t().open, TOUCH, true).clicked()
+                        && let Some(file) = engine.take_received(file.id)
+                    {
+                        phone.open_file(&file.location);
+                    }
+                    ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                        ui.add(egui::Label::new(RichText::new(&file.name).color(INK)).truncate());
+                    });
+                });
+            });
+        }
+        for file in &view.sent {
+            let (text, color) = if file.delivered {
+                ((t().sent_file)(&file.name), INK_SOFT)
+            } else {
+                ((t().not_sent)(&file.name), ACCENT)
+            };
+            ui.add(egui::Label::new(RichText::new(text).color(color)).truncate());
+        }
+        if view.received.is_empty() && view.sent.is_empty() {
+            ui.label(RichText::new(t().phone_files_help).color(INK_SOFT));
+        }
+        ui.add_space(4.0);
+        if pill(ui, t().send_file, TOUCH, false).clicked() {
+            phone.pick_files();
+        }
+    });
+}
+
+/// Las otras PCs emparejadas que responden en la red, para pasarse a una con un toque.
+fn draw_other_desktops(ui: &mut egui::Ui, engine: &Engine, view: &View) {
+    let others: Vec<&Found> = view
+        .found
+        .iter()
+        .filter(|found| found.paired && Some(found.fingerprint) != view.peer)
+        .collect();
+    if others.is_empty() {
+        return;
+    }
+    ui.add_space(6.0);
+    label(ui, t().other_pcs);
+    for found in others {
+        ui.horizontal(|ui| {
+            ui.set_min_height(TOUCH);
+            ui.add(egui::Label::new(&found.name).truncate());
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if pill(ui, t().switch_pc, TOUCH, true).clicked() {
+                    engine.switch_desktop(found.fingerprint);
+                }
+            });
+        });
+    }
 }
 
 /// Desvincular pide un segundo toque: deshacerlo obliga a emparejar otra vez.
